@@ -1,147 +1,271 @@
 (() => {
-  const TOKEN_KEY = 'pdf_extractor_token';
-  const API_BASE = '';
+  // ------------------------------------------------------------------
+  // Configuración de endpoints (ajustar según entorno real)
+  // ------------------------------------------------------------------
+  const API_BASE = ''; // mismo dominio del orquestador
+  const ENDPOINTS = {
+    upload: '/v1/documents/upload',
+    export: (id) => `/v1/documents/${id}/export?format=txt`,
+    list: '/v1/documents',
+  };
 
-  const tokenInput = document.getElementById('token');
-  const fileInput = document.getElementById('file');
-  const btnExtract = document.getElementById('btnExtract');
-  const resultCard = document.getElementById('resultCard');
-  const metaFile = document.getElementById('metaFile');
-  const metaPages = document.getElementById('metaPages');
-  const output = document.getElementById('output');
-  const btnDownload = document.getElementById('btnDownload');
-  const btnCopy = document.getElementById('btnCopy');
-  const alertError = document.getElementById('alert-error');
-  const alertSuccess = document.getElementById('alert-success');
+  // ------------------------------------------------------------------
+  // Referencias DOM
+  // ------------------------------------------------------------------
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const browseBtn = document.getElementById('browseBtn');
+  const tokenInput = document.getElementById('tokenInput');
+  const docTableBody = document.getElementById('docTableBody');
+  const emptyState = document.getElementById('emptyState');
+  const docCount = document.getElementById('docCount');
+  const toast = document.getElementById('toast');
+  const toastMsg = document.getElementById('toastMsg');
 
-  let currentDoc = null;
+  // ------------------------------------------------------------------
+  // Estado
+  // ------------------------------------------------------------------
+  let documents = []; // { id, name, size, uploadedAt, status, text }
 
-  function showError(msg) {
-    alertError.textContent = msg;
-    alertError.style.display = 'block';
-    alertSuccess.style.display = 'none';
+  // ------------------------------------------------------------------
+  // Utilidades
+  // ------------------------------------------------------------------
+  function formatSize(bytes) {
+    if (!bytes) return '—';
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${Math.round(kb)} KB`;
+    return `${(kb / 1024).toFixed(2)} MB`;
   }
 
-  function showSuccess(msg) {
-    alertSuccess.textContent = msg;
-    alertSuccess.style.display = 'block';
-    alertError.style.display = 'none';
+  function formatTime(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function hideAlerts() {
-    alertError.style.display = 'none';
-    alertSuccess.style.display = 'none';
+  function showToast(msg, type = 'success') {
+    toastMsg.textContent = msg;
+    toast.classList.remove('translate-x-full');
+    setTimeout(() => { toast.classList.add('translate-x-full'); }, 3000);
   }
 
-  function loadToken() {
-    const saved = localStorage.getItem(TOKEN_KEY);
-    if (saved) tokenInput.value = saved;
+  function renderTable() {
+    docCount.textContent = `${documents.length} documento${documents.length !== 1 ? 's' : ''}`;
+
+    if (documents.length === 0) {
+      docTableBody.innerHTML = '';
+      emptyState.classList.remove('hidden');
+      return;
+    }
+
+    emptyState.classList.add('hidden');
+
+    docTableBody.innerHTML = documents.map(doc => `
+      <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+        <td class="px-6 py-4">
+          <div class="font-medium text-gray-800">${escapeHtml(doc.name)}</div>
+          <div class="text-xs text-gray-500 mt-1">${doc.id}</div>
+        </td>
+        <td class="px-6 py-4 text-gray-600">${formatSize(doc.size)}</td>
+        <td class="px-6 py-4 text-gray-600">${formatTime(doc.uploadedAt)}</td>
+        <td class="px-6 py-4">
+          <span class="status-badge ${doc.status === 'procesando' ? 'status-procesando' : 'status-completado'}">
+            ${doc.status === 'procesando'
+              ? `<span class="w-3 h-3 border-2 border-current border-t-transparent rounded-full spinner mr-2"></span>En proceso`
+              : `<span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>Completado`}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-right">
+          ${doc.status === 'completado'
+            ? `
+              <button class="btn-copy btn-download mr-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 flex items-center gap-1" onclick="app.downloadMarkdown('${doc.id}')">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Descargar .md
+              </button>
+              <button class="btn-copy px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 flex items-center gap-1" onclick="app.copyText('${doc.id}')">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                Copiar
+              </button>
+            `
+            : `<span class="text-xs text-gray-400">—</span>`
+          }
+        </td>
+      </tr>
+    `).join('');
   }
 
-  function saveToken() {
-    localStorage.setItem(TOKEN_KEY, tokenInput.value.trim());
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
-  function validate() {
-    const hasToken = tokenInput.value.trim().length > 0;
-    const hasFile = fileInput.files.length > 0;
-    btnExtract.disabled = !(hasToken && hasFile);
+  function generateId() {
+    return 'doc_' + Math.random().toString(36).substr(2, 9);
   }
 
-  async function extractPdf() {
-    hideAlerts();
+  // ------------------------------------------------------------------
+  // Drag & Drop
+  // ------------------------------------------------------------------
+  ['dragenter', 'dragover'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+    });
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length) handleFile(files[0]);
+  });
+
+  browseBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  function handleFile(file) {
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Solo se permiten archivos PDF', 'error');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('El archivo supera los 10 MB', 'error');
+      return;
+    }
+
     const token = tokenInput.value.trim();
-    const file = fileInput.files[0];
-    saveToken();
+    if (!token) {
+      showToast('Ingresa el token interno primero', 'error');
+      return;
+    }
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const id = generateId();
+    const now = new Date().toISOString();
 
-    btnExtract.disabled = true;
-    btnExtract.textContent = 'Procesando...';
+    documents.unshift({
+      id,
+      name: file.name,
+      size: file.size,
+      uploadedAt: now,
+      status: 'procesando',
+      text: null,
+    });
+    renderTable();
 
+    // Llamada simulada al backend
+    uploadDocument(file, token, id);
+  }
+
+  // ------------------------------------------------------------------
+  // Funciones esqueleto (mock) — reemplazar con fetch real al backend
+  // ------------------------------------------------------------------
+  async function uploadDocument(file, token, docId) {
     try {
-      const res = await fetch(`${API_BASE}/v1/documents/upload`, {
+      // TODO: Conectar con backend real
+      /*
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}${ENDPOINTS.upload}`, {
         method: 'POST',
         headers: { 'X-Internal-Token': token },
         body: formData,
       });
 
-      if (res.status === 401) {
-        throw new Error('Token interno invalido. Verifica el token e intenta de nuevo.');
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Error ${res.status} al subir el PDF`);
-      }
-
+      if (!res.ok) throw new Error(`Error ${res.status}`);
       const data = await res.json();
-      currentDoc = data;
 
-      metaFile.textContent = data.filename || '-';
-      metaPages.textContent = data.pages || '-';
-      output.value = data.text || '';
+      const idx = documents.findIndex(d => d.id === docId);
+      if (idx !== -1) {
+        documents[idx] = { ...documents[idx], status: 'completado', text: data.text || '', id: data.id || docId };
+        renderTable();
+        showToast('Documento procesado correctamente');
+      }
+      */
 
-      resultCard.classList.remove('hidden');
-      btnDownload.disabled = false;
-      showSuccess('PDF extraido correctamente.');
+      // Simulación de retraso de red
+      await new Promise(r => setTimeout(r, 2500));
+
+      const idx = documents.findIndex(d => d.id === docId);
+      if (idx !== -1) {
+        documents[idx] = {
+          ...documents[idx],
+          status: 'completado',
+          text: 'Contenido extraído simulado del PDF: ' + documents[idx].name,
+        };
+        renderTable();
+        showToast('Documento procesado correctamente');
+      }
     } catch (err) {
-      showError(err.message);
       console.error(err);
-    } finally {
-      btnExtract.disabled = false;
-      btnExtract.textContent = 'Extraer texto';
+      const idx = documents.findIndex(d => d.id === docId);
+      if (idx !== -1) {
+        documents[idx] = { ...documents[idx], status: 'error' };
+        renderTable();
+        showToast('Error al procesar el documento', 'error');
+      }
     }
   }
 
-  function downloadMarkdown() {
-    if (!currentDoc) return;
-    const name = (currentDoc.filename || 'documento').replace(/\.[^/.]+$/, '');
-    const pages = currentDoc.pages || 0;
-    const text = currentDoc.text || '';
+  async function downloadMarkdown(docId) {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc || !doc.text) return;
 
-    const md = [
-      `# ${name}`,
-      ``,
-      `Paginas: ${pages}`,
-      ``,
-      `## Contenido extraido`,
-      ``,
-      text,
-      ``,
-    ].join('\n');
-
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showSuccess(`Archivo ${name}.md descargado.`);
-  }
-
-  async function copyToClipboard() {
-    const text = output.value;
-    if (!text) return;
     try {
-      await navigator.clipboard.writeText(text);
-      showSuccess('Texto copiado al portapapeles.');
+      // TODO: Conectar con backend real
+      /*
+      const token = tokenInput.value.trim();
+      const res = await fetch(`${API_BASE}${ENDPOINTS.export(docId)}`, {
+        headers: { 'X-Internal-Token': token },
+      });
+      const blob = await res.blob();
+      */
+
+      const blob = new Blob([doc.text || ''], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${doc.name.replace(/\.[^/.]+$/, '')}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Archivo descargado');
     } catch (err) {
-      output.select();
-      document.execCommand('copy');
-      showSuccess('Texto copiado al portapapeles.');
+      console.error(err);
+      showToast('Error al descargar', 'error');
     }
   }
 
-  tokenInput.addEventListener('input', validate);
-  fileInput.addEventListener('change', validate);
-  btnExtract.addEventListener('click', extractPdf);
-  btnDownload.addEventListener('click', downloadMarkdown);
-  btnCopy.addEventListener('click', copyToClipboard);
+  async function copyText(docId) {
+    const doc = documents.find(d => d.id === docId);
+    if (!doc || !doc.text) return;
 
-  loadToken();
-  validate();
+    try {
+      await navigator.clipboard.writeText(doc.text);
+      showToast('Texto copiado al portapapeles');
+    } catch (err) {
+      doc.select ? doc.select() : null;
+      document.execCommand('copy');
+      showToast('Texto copiado al portapapeles');
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Inicialización
+  // ------------------------------------------------------------------
+  renderTable();
+
+  // Exponer métodos globales para los botones inline
+  window.app = { downloadMarkdown, copyText };
 })();
