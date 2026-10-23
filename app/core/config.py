@@ -3,14 +3,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
     # Logging
     loglevel: str = "INFO"
 
-    # URLs de los servicios downstream (incluye esquema y puerto)
-    extractor_url: str = "http://pdf-extractor-service:8000"
-    crud_url: str = "http://document-crud-service:8000"
+    # URLs de los servicios downstream (incluye esquema y puerto).
+    # Valores por defecto para desarrollo local (sin Docker). En Docker Compose
+    # se sobrescriben con los nombres de servicio de la red interna.
+    extractor_url: str = "http://localhost:8001"
+    crud_url: str = "http://localhost:8002"
 
     # Timeouts separados (segundos)
     connect_timeout: float = 5.0
@@ -33,8 +35,8 @@ class Settings(BaseSettings):
     # Límites
     max_file_size_mb: int = 10
 
-    # Auth interna
-    internal_api_token: str = "change-me"
+    # Auth interna (requerido, sin valor por defecto inseguro)
+    internal_api_token: str
 
     # Puerto público (documentado para compose)
     public_port: int = 8000

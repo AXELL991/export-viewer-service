@@ -47,7 +47,7 @@ services:
       MONGO_DB_NAME: document_crud_db
       MONGO_TIMEOUT_MS: 5000
       LOGLEVEL: info
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-token-cambiar-en-produccion}
       MAX_TEXT_BYTES: 15728640
       PAGE_SIZE_MAX: 100
     networks:
@@ -76,7 +76,7 @@ services:
     stop_grace_period: 30s
     environment:
       LOGLEVEL: info
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-token-cambiar-en-produccion}
       MAX_FILE_SIZE_MB: 10
       MAX_PAGES: 500
       EXTRACT_TIMEOUT_SECONDS: 60
@@ -119,7 +119,7 @@ services:
       TRUSTED_PROXY: false
       MAX_FILE_SIZE_MB: 10
       LOGLEVEL: info
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-token-cambiar-en-produccion}
       PUBLIC_PORT: ${PUBLIC_PORT:-8000}
     networks:
       - interna
