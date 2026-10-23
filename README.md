@@ -221,6 +221,18 @@ Tomadas del `.env.example` real del orquestador:
 
 Todos los endpoints salvo `/health/*` requieren la cabecera `X-Internal-Token`. Se propaga `X-Request-ID` y `X-Internal-Token` a los servicios downstream.
 
+## Interfaz web (UI)
+
+El orquestador incluye una interfaz web sencilla en la ruta raíz (`http://localhost:8000/`). Permite:
+
+1. Ingresar el `X-Internal-Token` (se guarda en el navegador).
+2. Seleccionar y subir un PDF.
+3. Ver el texto extraído y el número de páginas.
+4. Descargar el contenido como archivo Markdown (`.md`).
+5. Copiar el texto al portapapeles.
+
+Los endpoints de la API (`/v1/*`) siguen protegidos por `X-Internal-Token`; solo la UI y los archivos estáticos están exentos.
+
 ## Tests y CI
 
 ```bash

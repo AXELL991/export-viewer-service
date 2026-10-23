@@ -23,7 +23,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.downstream import (
@@ -100,6 +101,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def ui_index():
+    return FileResponse("app/static/index.html")
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
@@ -139,7 +147,7 @@ async def request_id_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def internal_auth_middleware(request: Request, call_next):
-    if request.url.path.startswith(("/health", "/docs", "/openapi.json")):
+    if request.url.path.startswith(("/health", "/docs", "/openapi.json", "/", "/static")):
         return await call_next(request)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     token = request.headers.get("X-Internal-Token")
