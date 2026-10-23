@@ -1,0 +1,21 @@
+[tool.uv]
+
+[project]
+name = "export-viewer-service"
+version = "0.1.0"
+description = "Orchestrator service that calls pdf-extractor and document-crud services"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx[http2]",
+    "python-dotenv",
+    "prometheus-client",
+    "python-json-logger",
+    "tenacity",
+]
+
+[build-system]
+requires = ["uv"]
+build-backend = "uv.build"
+
