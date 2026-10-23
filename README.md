@@ -1,10 +1,10 @@
 # export-viewer-service
 
-Servicio orquestador. Es el **único punto de entrada público** de la plataforma de extracción de PDF. Recibe un PDF, lo valida en streaming, lo envía al servicio extractor para obtener el texto y lo guarda mediante el servicio CRUD (el único dueño de MongoDB).
+Servicio orquestador. Es el unico punto de entrada publico de la plataforma de extraccion de PDF. Recibe un PDF, lo valida en streaming, lo envia al servicio extractor para obtener el texto y lo guarda mediante el servicio CRUD (el unico dueno de MongoDB).
 
-## Qué es
+## Que es
 
-El orquestador expone la API pública bajo el prefijo `/v1`. No toca MongoDB directamente: delega la extracción en `pdf-extractor-service` y la persistencia en `document-crud-service`.
+El orquestador expone la API publica bajo el prefijo `/v1`. No toca MongoDB directamente: delega la extraccion en `pdf-extractor-service` y la persistencia en `document-crud-service`.
 
 ```text
          Cliente
@@ -17,12 +17,12 @@ El orquestador expone la API pública bajo el prefijo `/v1`. No toca MongoDB dir
 |  - valida tamaño (stream) |-->  POST /v1/extract
 |  - hash SHA-256 del PDF   |        pdf-extractor-service (8001)
 |  - Idempotency-Key        |        (sin estado, pool de procesos)
-|  - reenvía al CRUD        |
+|  - reenvia al CRUD        |
 +---------------------------+
            |  POST /v1/documents (Idempotency-Key)
            v
 +---------------------------+
-| document-crud-service     |  CRUD (único dueño de MongoDB)
+| document-crud-service     |  CRUD (unico dueno de MongoDB)
 |                           |--> MongoDB (document_crud_db)
 |  - POST /v1/documents     |
 |  - GET  /v1/documents{,/id}|
@@ -47,22 +47,22 @@ ls
 # export-viewer-service  pdf-extractor-service  document-crud-service
 ```
 
-## Configuración
+## Configuracion
 
 Desde la carpeta `export-viewer-service`:
 
 ```bash
 cp .env.example .env
-# Editar .env con los valores reales (ver tabla más abajo)
+# Editar .env con los valores reales (ver tabla mas abajo)
 # Generar el token interno:
 openssl rand -hex 32
 ```
 
-El `.env` **nunca se sube a git** (está en `.gitignore`). El mismo `INTERNAL_API_TOKEN` debe configurarse en los tres servicios. En producción, crear un usuario de Mongo limitado a la base de datos `document_crud_db`.
+El `.env` **nunca se sube a git** (esta en `.gitignore`). El mismo `INTERNAL_API_TOKEN` debe configurarse en los tres servicios. En produccion, crear un usuario de Mongo limitado a la base de datos `document_crud_db`.
 
-## Cómo INICIAR la FastAPI
+## Como INICIAR la FastAPI
 
-### Opción A — Docker Compose (recomendado)
+### Opcion A — Docker Compose (recomendado)
 
 Desde `export-viewer-service`:
 
@@ -87,11 +87,11 @@ El compose define estos servicios (red interna `interna`):
 | mongo | — (no publicado) | No |
 | document-crud-service | — (no publicado) | No |
 | pdf-extractor-service | — (no publicado) | No |
-| export-viewer-service | `${PUBLIC_PORT:-8000}:8000` | Sí |
+| export-viewer-service | `${PUBLIC_PORT:-8000}:8000` | Si |
 
 Solo el orquestador publica puerto. Mongo, extractor y CRUD quedan inaccesibles desde el host (solo red interna). Los nombres de servicio coinciden con las URLs de `.env.example` (`EXTRACTOR_URL=http://pdf-extractor-service:8000`, `CRUD_URL=http://document-crud-service:8000`).
 
-### Opción B — Local sin Docker
+### Opcion B — Local sin Docker
 
 1. Levantar solo Mongo (desde `export-viewer-service`):
 
@@ -130,7 +130,7 @@ CRUD_URL=http://localhost:8002
 
 El punto de entrada es `app.main:app` y expone `GET /health/live`, `GET /health/ready` y Swagger en `GET /docs`.
 
-## Cómo CERRAR la FastAPI
+## Como CERRAR la FastAPI
 
 ### Docker
 
@@ -138,7 +138,7 @@ El punto de entrada es `app.main:app` y expone `GET /health/live`, `GET /health/
 - `docker compose down` — elimina contenedores y red, **conserva** los datos de Mongo (volumen `mongo-data`).
 - `docker compose down -v` — **BORRA el volumen de Mongo** (los datos se pierden irreversiblemente).
 
-> **Advertencia:** `docker compose down -v` borra permanentemente el volumen `mongo-data` con toda la información de MongoDB.
+> **Advertencia:** `docker compose down -v` borra permanentemente el volumen `mongo-data` con toda la informacion de MongoDB.
 
 ### Local, en primer plano
 
@@ -168,49 +168,49 @@ Usar `kill -9` o `taskkill /F` solo si el proceso no responde tras 30 segundos.
 2. pdf-extractor-service y document-crud-service
 3. mongo (al final)
 
-### Cómo confirmar que se cerró
+### Como confirmar que se cerro
 
 - `docker compose ps` debe mostrar los contenedores detenidos/ausentes.
-- `curl http://localhost:8000/health/ready` debe fallar (conexión rechazada).
+- `curl http://localhost:8000/health/ready` debe fallar (conexion rechazada).
 
 ## Troubleshooting
 
-| Síntoma | Causa probable | Acción |
+| Sintoma | Causa probable | Accion |
 |---------|----------------|--------|
 | Puerto 8000 ocupado | Otro proceso escucha | Liberar el puerto o cambiar `PUBLIC_PORT` |
 | `/health/ready` en 503 | Un downstream no responde | Revisar `docker compose logs` de extractor/CRUD/mongo |
-| Servicio caído | Contenedor sin `healthy` | Revisar healthchecks y logs |
-| Token inválido (401) | `X-Internal-Token` no coincide | Sincronizar `INTERNAL_API_TOKEN` en los 3 `.env` |
-| `.env` ausente | No se copió desde `.env.example` | Ejecutar `cp .env.example .env` y rellenar valores |
+| Servicio caido | Contenedor sin `healthy` | Revisar healthchecks y logs |
+| Token invalido (401) | `X-Internal-Token` no coincide | Sincronizar `INTERNAL_API_TOKEN` en los 3 `.env` |
+| `.env` ausente | No se copio desde `.env.example` | Ejecutar `cp .env.example .env` y rellenar valores |
 
 ## Variables de entorno
 
 Tomadas del `.env.example` real del orquestador:
 
-| Variable | Valor de ejemplo | Descripción |
+| Variable | Valor de ejemplo | Descripcion |
 |----------|------------------|-------------|
 | `EXTRACTOR_URL` | `http://pdf-extractor-service:8000` | URL del servicio extractor |
 | `CRUD_URL` | `http://document-crud-service:8000` | URL del servicio CRUD |
-| `CONNECT_TIMEOUT` | `5` | Timeout de conexión TCP (s) |
+| `CONNECT_TIMEOUT` | `5` | Timeout de conexion TCP (s) |
 | `EXTRACTOR_READ_TIMEOUT` | `60` | Timeout de lectura del extractor (s) |
 | `CRUD_READ_TIMEOUT` | `5` | Timeout de lectura del CRUD (s) |
 | `RETRY_ATTEMPTS` | `3` | Reintentos a downstream |
 | `RETRY_BACKOFF_BASE` | `0.5` | Base del backoff exponencial (s) |
 | `CIRCUIT_BREAKER_FAILURES` | `5` | Fallos consecutivos para abrir el circuito |
 | `CIRCUIT_BREAKER_RECOVERY` | `30` | Segundos de circuito abierto |
-| `RATE_LIMIT_MAX` | `60` | Requests máximos por IP en ventana |
+| `RATE_LIMIT_MAX` | `60` | Requests maximos por IP en ventana |
 | `RATE_LIMIT_WINDOW` | `60` | Ventana del rate limit (s) |
 | `TRUSTED_PROXY` | `false` | Confiar en `X-Forwarded-For` |
-| `MAX_FILE_SIZE_MB` | `10` | Tamaño máximo de PDF (MB) |
+| `MAX_FILE_SIZE_MB` | `10` | Tamano maximo de PDF (MB) |
 | `LOGLEVEL` | `info` | Nivel de logging |
-| `INTERNAL_API_TOKEN` | `change-me` | Token interno (misma valor en los 3 servicios) |
+| `INTERNAL_API_TOKEN` | `change-me` | Token interno (mismo valor en los 3 servicios) |
 | `PUBLIC_PORT` | `8000` | Puerto publicado del orquestador |
 | `MONGO_ROOT_USER` | `mongouser` | Usuario root de Mongo (compose) |
 | `MONGO_ROOT_PASS` | `mongopassword` | Contraseña root de Mongo (compose) |
 
 ## Endpoints principales
 
-| Método | Ruta | Descripción |
+| Metodo | Ruta | Descripcion |
 |--------|------|-------------|
 | POST | `/v1/documents/upload` | Subir PDF (extraer + guardar) |
 | GET | `/v1/documents` | Listar paginado (`page`, `page_size`) |
@@ -223,15 +223,15 @@ Todos los endpoints salvo `/health/*` requieren la cabecera `X-Internal-Token`. 
 
 ## Interfaz web (UI)
 
-El orquestador incluye una interfaz web sencilla en la ruta raíz (`http://localhost:8000/`). Permite:
+El orquestador incluye una interfaz web sencilla en la ruta raiz (`http://localhost:8000/`). Permite:
 
 1. Ingresar el `X-Internal-Token` (se guarda en el navegador).
 2. Seleccionar y subir un PDF.
-3. Ver el texto extraído y el número de páginas.
+3. Ver el texto extraido y el numero de paginas.
 4. Descargar el contenido como archivo Markdown (`.md`).
 5. Copiar el texto al portapapeles.
 
-Los endpoints de la API (`/v1/*`) siguen protegidos por `X-Internal-Token`; solo la UI y los archivos estáticos están exentos.
+Los endpoints de la API (`/v1/*`) siguen protegidos por `X-Internal-Token`; solo la UI y los archivos estaticos estan exentos.
 
 ## Tests y CI
 

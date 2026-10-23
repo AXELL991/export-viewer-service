@@ -68,7 +68,7 @@
       });
 
       if (res.status === 401) {
-        throw new Error('Token interno inv├Īlido. Verifica el token e intenta de nuevo.');
+        throw new Error('Token interno invalido. Verifica el token e intenta de nuevo.');
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -84,7 +84,7 @@
 
       resultCard.classList.remove('hidden');
       btnDownload.disabled = false;
-      showSuccess('PDF extraído correctamente.');
+      showSuccess('PDF extraido correctamente.');
     } catch (err) {
       showError(err.message);
       console.error(err);
@@ -103,9 +103,9 @@
     const md = [
       `# ${name}`,
       ``,
-      `Páginas: ${pages}`,
+      `Paginas: ${pages}`,
       ``,
-      `## Contenido extraído`,
+      `## Contenido extraido`,
       ``,
       text,
       ``,
