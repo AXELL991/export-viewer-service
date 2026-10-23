@@ -139,7 +139,7 @@ async def request_id_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def internal_auth_middleware(request: Request, call_next):
-    if request.url.path.startswith("/health"):
+    if request.url.path.startswith(("/health", "/docs", "/openapi.json")):
         return await call_next(request)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     token = request.headers.get("X-Internal-Token")
