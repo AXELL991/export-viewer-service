@@ -1,0 +1,35 @@
+http:
+  routers:
+    export-viewer:
+      rule: "Host(`localhost`)"
+      entryPoints:
+        - web
+      service: export-viewer
+
+    document-crud:
+      rule: "PathPrefix(`/v1/documents`)"
+      entryPoints:
+        - web
+      service: document-crud
+
+    pdf-extractor:
+      rule: "PathPrefix(`/v1/extract`)"
+      entryPoints:
+        - web
+      service: pdf-extractor
+
+  services:
+    export-viewer:
+      loadBalancer:
+        servers:
+          - url: "http://export-viewer-service:8000"
+
+    document-crud:
+      loadBalancer:
+        servers:
+          - url: "http://document-crud-service:8000"
+
+    pdf-extractor:
+      loadBalancer:
+        servers:
+          - url: "http://pdf-extractor-service:8000"

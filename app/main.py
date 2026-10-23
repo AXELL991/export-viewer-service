@@ -34,7 +34,7 @@ from app.core.downstream import (
     http_client,
 )
 from app.core.logging_config import configure_logging
-from app.core.rate_limit import RateLimiter
+from app.core.rate_limit import RateLimiter, create_redis_client
 
 configure_logging(settings.loglevel.upper())
 logger = logging.getLogger(__name__)
@@ -85,7 +85,8 @@ def _map_downstream_error(exc: Exception) -> HTTPException:
 async def lifespan(app: FastAPI):
     global _rate_limiter
     await http_client.start()
-    _rate_limiter = RateLimiter(settings.rate_limit_max, settings.rate_limit_window)
+    redis_client = create_redis_client(settings.redis_url)
+    _rate_limiter = RateLimiter(settings.rate_limit_max, settings.rate_limit_window, redis_client)
     logger.info("export-viewer-service iniciado")
     try:
         yield

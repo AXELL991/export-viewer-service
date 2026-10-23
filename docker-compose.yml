@@ -9,6 +9,44 @@
 name: pdf_extractor
 
 services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+      - --api.insecure=true
+      - --api.dashboard=true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - interna
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --maxmemory-policy allkeys-lru
+    networks:
+      - interna
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
   mongo:
     image: mongo:6.0
     container_name: mongo
@@ -28,8 +66,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # No se publica el puerto: solo accesible desde la red interna.
     deploy:
+      replicas: 1
       resources:
         limits:
           cpus: "1"
@@ -39,7 +77,6 @@ services:
     build:
       context: ../document-crud-service
       dockerfile: Dockerfile
-    container_name: document-crud-service
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
@@ -56,6 +93,7 @@ services:
       mongo:
         condition: service_healthy
     deploy:
+      replicas: 2
       resources:
         limits:
           cpus: "1"
@@ -66,12 +104,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.document-crud.rule=PathPrefix(`/v1/documents`)"
+      - "traefik.http.routers.document-crud.entrypoints=web"
+      - "traefik.http.services.document-crud.loadbalancer.server.port=8000"
 
   pdf-extractor-service:
     build:
       context: ../pdf-extractor-service
       dockerfile: Dockerfile
-    container_name: pdf-extractor-service
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
@@ -84,8 +126,8 @@ services:
       QUEUE_MAXSIZE: 10
     networks:
       - interna
-    # Stateless: no depende de mongo.
     deploy:
+      replicas: 2
       resources:
         limits:
           cpus: "2"
@@ -96,17 +138,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pdf-extractor.rule=PathPrefix(`/v1/extract`)"
+      - "traefik.http.routers.pdf-extractor.entrypoints=web"
+      - "traefik.http.services.pdf-extractor.loadbalancer.server.port=8000"
 
   export-viewer-service:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: export-viewer-service
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
       EXTRACTOR_URL: http://pdf-extractor-service:8000
       CRUD_URL: http://document-crud-service:8000
+      REDIS_URL: redis://redis:6379/0
       CONNECT_TIMEOUT: 5
       EXTRACTOR_READ_TIMEOUT: 60
       CRUD_READ_TIMEOUT: 5
@@ -123,14 +170,15 @@ services:
       PUBLIC_PORT: ${PUBLIC_PORT:-8000}
     networks:
       - interna
-    ports:
-      - "${PUBLIC_PORT:-8000}:8000"
     depends_on:
       pdf-extractor-service:
         condition: service_healthy
       document-crud-service:
         condition: service_healthy
+      redis:
+        condition: service_started
     deploy:
+      replicas: 2
       resources:
         limits:
           cpus: "1"
@@ -141,6 +189,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.export-viewer.rule=Host(`localhost`)"
+      - "traefik.http.routers.export-viewer.entrypoints=web"
+      - "traefik.http.services.export-viewer.loadbalancer.server.port=8000"
 
 networks:
   interna:

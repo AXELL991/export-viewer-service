@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Límites
     max_file_size_mb: int = 10
 
+    # Redis para rate limiting compartido (bulk head)
+    redis_url: str = "redis://localhost:6379/0"
+
     # Auth interna (requerido, sin valor por defecto inseguro)
     internal_api_token: str
 
