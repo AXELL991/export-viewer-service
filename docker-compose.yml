@@ -24,14 +24,17 @@ services:
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ../traefik-proxy/certs:/etc/certs:ro
     networks:
-      - interna
+      - pdf-extractor-network
     deploy:
       replicas: 1
       resources:
         limits:
           cpus: "0.5"
           memory: 256M
+    labels:
+      - "traefik.enable=true"
 
   redis:
     image: redis:7-alpine
@@ -39,13 +42,15 @@ services:
     restart: unless-stopped
     command: redis-server --save 60 1 --maxmemory-policy allkeys-lru
     networks:
-      - interna
+      - pdf-extractor-network
     deploy:
       replicas: 1
       resources:
         limits:
           cpus: "0.25"
           memory: 128M
+    labels:
+      - "traefik.enable=false"
 
   mongo:
     image: mongo:6.0
@@ -59,7 +64,7 @@ services:
     volumes:
       - mongo-data:/data/db
     networks:
-      - interna
+      - pdf-extractor-network
     healthcheck:
       test: ["CMD", "mongosh", "-u", "${MONGO_ROOT_USER:-mongouser}", "-p", "${MONGO_ROOT_PASS:-mongopassword}", "--authenticationDatabase", "admin", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -72,6 +77,8 @@ services:
         limits:
           cpus: "1"
           memory: 512M
+    labels:
+      - "traefik.enable=false"
 
   document-crud-service:
     build:
@@ -88,7 +95,7 @@ services:
       MAX_TEXT_BYTES: 15728640
       PAGE_SIZE_MAX: 100
     networks:
-      - interna
+      - pdf-extractor-network
     depends_on:
       mongo:
         condition: service_healthy
@@ -125,7 +132,7 @@ services:
       WORKER_POOL_SIZE: 2
       QUEUE_MAXSIZE: 10
     networks:
-      - interna
+      - pdf-extractor-network
     deploy:
       replicas: 2
       resources:
@@ -169,7 +176,7 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-insecure-dev-token-cambiar-en-produccion}
       PUBLIC_PORT: ${PUBLIC_PORT:-8000}
     networks:
-      - interna
+      - pdf-extractor-network
     depends_on:
       pdf-extractor-service:
         condition: service_healthy
@@ -196,8 +203,8 @@ services:
       - "traefik.http.services.export-viewer.loadbalancer.server.port=8000"
 
 networks:
-  interna:
-    driver: bridge
+  pdf-extractor-network:
+    external: true
 
 volumes:
   mongo-data:

@@ -1,22 +1,35 @@
 http:
   routers:
+    # Dashboard de Traefik (solo HTTP local)
+    traefik-dashboard:
+      rule: "Host(`localhost`)"
+      service: "api@internal"
+      entryPoints:
+        - "traefik"
+
+    # API pública - Orquestador (UI y endpoints) con HTTPS
     export-viewer:
       rule: "Host(`localhost`)"
+      service: "export-viewer"
       entryPoints:
-        - web
-      service: export-viewer
+        - "websecure"
+      tls: {}
 
+    # Servicio CRUD de documentos con HTTPS
     document-crud:
       rule: "PathPrefix(`/v1/documents`)"
+      service: "document-crud"
       entryPoints:
-        - web
-      service: document-crud
+        - "websecure"
+      tls: {}
 
+    # Servicio extractor de PDF con HTTPS
     pdf-extractor:
       rule: "PathPrefix(`/v1/extract`)"
+      service: "pdf-extractor"
       entryPoints:
-        - web
-      service: pdf-extractor
+        - "websecure"
+      tls: {}
 
   services:
     export-viewer:
@@ -33,3 +46,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://pdf-extractor-service:8000"
+
+tls:
+  certificates:
+    - certFile: "/etc/certs/cert.pem"
+      keyFile: "/etc/certs/key.pem"

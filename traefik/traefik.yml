@@ -1,8 +1,17 @@
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
   websecure:
     address: ":443"
+
+  traefik:
+    address: ":8080"
 
 api:
   insecure: true
@@ -11,3 +20,7 @@ api:
 providers:
   file:
     filename: /etc/traefik/dynamic.yml
+
+log:
+  level: INFO
+  format: common
