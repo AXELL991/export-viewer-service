@@ -204,7 +204,7 @@ services:
 
 networks:
   pdf-extractor-network:
-    external: true
+    driver: bridge
 
 volumes:
   mongo-data:

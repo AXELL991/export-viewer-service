@@ -1,35 +1,22 @@
 (() => {
-  // ------------------------------------------------------------------
-  // Configuración de endpoints (ajustar según entorno real)
-  // ------------------------------------------------------------------
-  const API_BASE = ''; // mismo dominio del orquestador
+  const API_BASE = '';
   const ENDPOINTS = {
     upload: '/v1/documents/upload',
     export: (id) => `/v1/documents/${id}/export?format=txt`,
     list: '/v1/documents',
   };
 
-  // ------------------------------------------------------------------
-  // Referencias DOM
-  // ------------------------------------------------------------------
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
   const browseBtn = document.getElementById('browseBtn');
-  const tokenInput = document.getElementById('tokenInput');
   const docTableBody = document.getElementById('docTableBody');
   const emptyState = document.getElementById('emptyState');
   const docCount = document.getElementById('docCount');
   const toast = document.getElementById('toast');
   const toastMsg = document.getElementById('toastMsg');
 
-  // ------------------------------------------------------------------
-  // Estado
-  // ------------------------------------------------------------------
-  let documents = []; // { id, name, size, uploadedAt, status, text }
+  let documents = [];
 
-  // ------------------------------------------------------------------
-  // Utilidades
-  // ------------------------------------------------------------------
   function formatSize(bytes) {
     if (!bytes) return '—';
     const kb = bytes / 1024;
@@ -45,53 +32,8 @@
 
   function showToast(msg, type = 'success') {
     toastMsg.textContent = msg;
-    toast.classList.remove('translate-x-full');
-    setTimeout(() => { toast.classList.add('translate-x-full'); }, 3000);
-  }
-
-  function renderTable() {
-    docCount.textContent = `${documents.length} documento${documents.length !== 1 ? 's' : ''}`;
-
-    if (documents.length === 0) {
-      docTableBody.innerHTML = '';
-      emptyState.classList.remove('hidden');
-      return;
-    }
-
-    emptyState.classList.add('hidden');
-
-    docTableBody.innerHTML = documents.map(doc => `
-      <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-        <td class="px-6 py-4">
-          <div class="font-medium text-gray-800">${escapeHtml(doc.name)}</div>
-          <div class="text-xs text-gray-500 mt-1">${doc.id}</div>
-        </td>
-        <td class="px-6 py-4 text-gray-600">${formatSize(doc.size)}</td>
-        <td class="px-6 py-4 text-gray-600">${formatTime(doc.uploadedAt)}</td>
-        <td class="px-6 py-4">
-          <span class="status-badge ${doc.status === 'procesando' ? 'status-procesando' : 'status-completado'}">
-            ${doc.status === 'procesando'
-              ? `<span class="w-3 h-3 border-2 border-current border-t-transparent rounded-full spinner mr-2"></span>En proceso`
-              : `<span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>Completado`}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-right">
-          ${doc.status === 'completado'
-            ? `
-              <button class="btn-copy btn-download mr-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 flex items-center gap-1" onclick="app.downloadMarkdown('${doc.id}')">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Descargar .md
-              </button>
-              <button class="btn-copy px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded hover:bg-gray-200 flex items-center gap-1" onclick="app.copyText('${doc.id}')">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
-                Copiar
-              </button>
-            `
-            : `<span class="text-xs text-gray-400">—</span>`
-          }
-        </td>
-      </tr>
-    `).join('');
+    toast.className = type === 'error' ? 'toast toast-error show' : 'toast show';
+    setTimeout(() => { toast.classList.remove('show'); }, 3500);
   }
 
   function escapeHtml(text) {
@@ -100,13 +42,53 @@
     return div.innerHTML;
   }
 
-  function generateId() {
-    return 'doc_' + Math.random().toString(36).substr(2, 9);
+  function renderTable() {
+    docCount.textContent = `${documents.length} documento${documents.length !== 1 ? 's' : ''}`;
+
+    if (documents.length === 0) {
+      docTableBody.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+
+    emptyState.style.display = 'none';
+
+    docTableBody.innerHTML = documents.map(doc => `
+      <tr>
+        <td>
+          <div class="doc-name">${escapeHtml(doc.name)}</div>
+          <div class="doc-id">${escapeHtml(doc.id || doc._id || '—')}</div>
+        </td>
+        <td class="doc-meta">${formatSize(doc.size)}</td>
+        <td class="doc-meta">${formatTime(doc.uploadedAt || doc.created_at)}</td>
+        <td>
+          <span class="badge ${doc.status === 'procesando' ? 'badge-proc' : doc.status === 'error' ? 'badge-err' : 'badge-done'}">
+            ${doc.status === 'procesando'
+              ? `<span class="spinner"></span>En proceso`
+              : doc.status === 'error'
+                ? 'Error'
+                : `<span style="width:8px;height:8px;background:var(--success);border-radius:50%;display:inline-block;margin-right:6px;"></span>Completado`}
+          </span>
+        </td>
+        <td style="text-align:right">
+          ${doc.status === 'completado'
+            ? `
+              <button class="btn btn-primary" onclick="app.downloadMarkdown('${escapeHtml(doc.id || doc._id)}')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Descargar .md
+              </button>
+              <button class="btn btn-ghost" onclick="app.copyText('${escapeHtml(doc.id || doc._id)}')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                Copiar
+              </button>
+            `
+            : `<span class="doc-meta">—</span>`
+          }
+        </td>
+      </tr>
+    `).join('');
   }
 
-  // ------------------------------------------------------------------
-  // Drag & Drop
-  // ------------------------------------------------------------------
   ['dragenter', 'dragover'].forEach(evt => {
     dropZone.addEventListener(evt, (e) => {
       e.preventDefault();
@@ -143,13 +125,7 @@
       return;
     }
 
-    const token = tokenInput.value.trim();
-    if (!token) {
-      showToast('Ingresa el token interno primero', 'error');
-      return;
-    }
-
-    const id = generateId();
+    const id = 'doc_' + Math.random().toString(36).substr(2, 9);
     const now = new Date().toISOString();
 
     documents.unshift({
@@ -162,46 +138,38 @@
     });
     renderTable();
 
-    // Llamada simulada al backend
-    uploadDocument(file, token, id);
+    uploadDocument(file, id);
   }
 
-  // ------------------------------------------------------------------
-  // Funciones esqueleto (mock) — reemplazar con fetch real al backend
-  // ------------------------------------------------------------------
-  async function uploadDocument(file, token, docId) {
+  async function uploadDocument(file, docId) {
     try {
-      // TODO: Conectar con backend real
-      /*
       const formData = new FormData();
       formData.append('file', file);
 
       const res = await fetch(`${API_BASE}${ENDPOINTS.upload}`, {
         method: 'POST',
-        headers: { 'X-Internal-Token': token },
         body: formData,
       });
 
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const data = await res.json();
-
-      const idx = documents.findIndex(d => d.id === docId);
-      if (idx !== -1) {
-        documents[idx] = { ...documents[idx], status: 'completado', text: data.text || '', id: data.id || docId };
-        renderTable();
-        showToast('Documento procesado correctamente');
+      if (res.status === 429) {
+        throw new Error('Demasiadas solicitudes. Intente más tarde.');
       }
-      */
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Error ${res.status}`);
+      }
 
-      // Simulación de retraso de red
-      await new Promise(r => setTimeout(r, 2500));
+      const data = await res.json();
 
       const idx = documents.findIndex(d => d.id === docId);
       if (idx !== -1) {
         documents[idx] = {
           ...documents[idx],
           status: 'completado',
-          text: 'Contenido extraído simulado del PDF: ' + documents[idx].name,
+          text: data.text || '',
+          id: data.id || docId,
+          size: data.size || file.size,
+          uploadedAt: data.created_at || now,
         };
         renderTable();
         showToast('Documento procesado correctamente');
@@ -212,30 +180,25 @@
       if (idx !== -1) {
         documents[idx] = { ...documents[idx], status: 'error' };
         renderTable();
-        showToast('Error al procesar el documento', 'error');
+        showToast(err.message || 'Error al procesar el documento', 'error');
       }
     }
   }
 
   async function downloadMarkdown(docId) {
     const doc = documents.find(d => d.id === docId);
-    if (!doc || !doc.text) return;
+    if (!doc) return;
 
     try {
-      // TODO: Conectar con backend real
-      /*
-      const token = tokenInput.value.trim();
-      const res = await fetch(`${API_BASE}${ENDPOINTS.export(docId)}`, {
-        headers: { 'X-Internal-Token': token },
-      });
-      const blob = await res.blob();
-      */
+      const res = await fetch(`${API_BASE}${ENDPOINTS.export(docId)}`);
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const text = await res.text();
 
-      const blob = new Blob([doc.text || ''], { type: 'text/markdown;charset=utf-8' });
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${doc.name.replace(/\.[^/.]+$/, '')}.md`;
+      a.download = `${(doc.name || 'documento').replace(/\.[^/.]+$/, '')}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -255,17 +218,11 @@
       await navigator.clipboard.writeText(doc.text);
       showToast('Texto copiado al portapapeles');
     } catch (err) {
-      doc.select ? doc.select() : null;
-      document.execCommand('copy');
-      showToast('Texto copiado al portapapeles');
+      showToast('Error al copiar', 'error');
     }
   }
 
-  // ------------------------------------------------------------------
-  // Inicialización
-  // ------------------------------------------------------------------
   renderTable();
 
-  // Exponer métodos globales para los botones inline
   window.app = { downloadMarkdown, copyText };
 })();

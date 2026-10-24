@@ -16,13 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -59,13 +58,6 @@ def _client_ip(request: Request) -> str:
     if request.client is not None:
         return request.client.host
     return "unknown"
-
-
-async def _verify_internal_token(x_internal_token: str | None) -> None:
-    if not secrets.compare_digest(
-        (x_internal_token or "").encode(), settings.internal_api_token.encode()
-    ):
-        raise HTTPException(status_code=401, detail="Token interno inválido")
 
 
 def _map_downstream_error(exc: Exception) -> HTTPException:
@@ -144,23 +136,27 @@ async def request_id_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
-# Middleware: auth interna (/health/* exento)
+# Middleware: seguridad de cabeceras (Security Headers)
 # ---------------------------------------------------------------------------
 @app.middleware("http")
-async def internal_auth_middleware(request: Request, call_next):
-    if request.url.path.startswith(("/health", "/docs", "/openapi.json", "/", "/static")):
-        return await call_next(request)
-    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-    token = request.headers.get("X-Internal-Token")
-    if not secrets.compare_digest(
-        (token or "").encode(), settings.internal_api_token.encode()
-    ):
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Token interno inválido"},
-            headers={"X-Request-ID": request_id},
-        )
-    return await call_next(request)
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self';"
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +220,6 @@ async def health_ready():
 async def upload_document(
     request: Request,
     file: UploadFile = File(..., description="Archivo PDF a procesar"),
-    x_internal_token: str | None = Header(default=None),
 ):
     """
     Recibe un PDF, lo envía al extractor y guarda el resultado en el CRUD.
@@ -236,7 +231,6 @@ async def upload_document(
     - 429: cola del extractor llena (Retry-After).
     - 502/503/504: fallo del extractor o del CRUD.
     """
-    await _verify_internal_token(x_internal_token)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
 
     # Lectura en streaming con tope de tamaño y cálculo del hash SHA-256.
@@ -372,9 +366,7 @@ async def list_documents(
     request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    x_internal_token: str | None = Header(default=None),
 ):
-    await _verify_internal_token(x_internal_token)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     params = {"page": page, "page_size": page_size}
     try:
@@ -402,9 +394,7 @@ async def list_documents(
 async def get_document(
     request: Request,
     doc_id: str,
-    x_internal_token: str | None = Header(default=None),
 ):
-    await _verify_internal_token(x_internal_token)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     try:
         resp = await http_client.call(
@@ -433,9 +423,7 @@ async def export_document(
     request: Request,
     doc_id: str,
     format: str = Query("txt", description="txt o json"),
-    x_internal_token: str | None = Header(default=None),
 ):
-    await _verify_internal_token(x_internal_token)
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
     try:
         resp = await http_client.call(

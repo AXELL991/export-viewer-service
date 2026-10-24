@@ -4,104 +4,173 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Extractor View — PDF a Markdown</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-  .drop-zone { transition: all 0.2s ease; }
-  .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; transform: scale(1.02); }
-  .spinner { animation: spin 1s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-  .status-procesando { background: #dbeafe; color: #1e40af; }
-  .status-completado { background: #dcfce7; color: #166534; }
-  .btn-copy { transition: all 0.15s; }
-  .btn-copy:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-  .toast { animation: slideIn 0.3s ease-out; }
-  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --radius: 12px;
+  }
+  body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+  /* Navbar */
+  .navbar { background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
+  .navbar-inner { max-width: 1200px; margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 0.75rem; }
+  .brand-icon { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.125rem; }
+  .brand-text h1 { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.025em; }
+  .brand-text p { font-size: 0.75rem; color: var(--muted); }
+
+  /* Layout */
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .section-title { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.25rem; }
+  .section-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 1rem; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+  .card-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-body { padding: 1.25rem; }
+
+  /* Drop zone */
+  .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); background: #fbfdff; padding: 2.5rem 1.5rem; text-align: center; transition: all 0.2s ease; cursor: pointer; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: #eff6ff; }
+  .drop-icon { width: 64px; height: 64px; background: #eff6ff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; border: 2px solid #dbeafe; }
+  .drop-icon svg { width: 32px; height: 32px; color: var(--primary); }
+  .drop-title { font-size: 1.125rem; font-weight: 600; color: var(--text); margin-bottom: 0.5rem; }
+  .drop-hint { font-size: 0.875rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .browse-link { color: var(--primary); font-weight: 600; font-size: 0.875rem; text-decoration: underline; }
+  .drop-note { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
+
+  /* History table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); background: #f8fafc; }
+  td { padding: 0.875rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: #fbfdff; }
+
+  .doc-name { font-weight: 600; color: var(--text); }
+  .doc-id { font-size: 0.7rem; color: var(--muted); word-break: break-all; }
+  .doc-meta { color: var(--muted); font-size: 0.8125rem; }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .badge-proc { background: #dbeafe; color: #1e40af; }
+  .badge-done { background: #dcfce7; color: #166534; }
+  .badge-err { background: #fee2e2; color: #dc2626; }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8125rem; font-weight: 600; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+  .btn-ghost { background: #f1f5f9; color: var(--text); }
+  .btn-ghost:hover { background: #e2e8f0; }
+
+  .empty { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.875rem; }
+
+  /* Toast */
+  .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; }
+  .toast { background: var(--text); color: #fff; padding: 0.75rem 1rem; border-radius: 10px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); transform: translateX(120%); transition: transform 0.3s ease; display: flex; align-items: center; gap: 0.75rem; min-width: 260px; }
+  .toast.show { transform: translateX(0); }
+  .toast-error { background: var(--danger); }
+  .toast svg { width: 20px; height: 20px; }
+
+  input[type="file"] { display: none; }
+
+  @media (max-width: 640px) {
+    .container { padding: 1rem 1rem; }
+    .card-body { padding: 1rem; }
+    .drop-zone { padding: 1.5rem 1rem; }
+    td, th { padding: 0.625rem 0.75rem; font-size: 0.8125rem; }
+  }
 </style>
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body>
 
-<!-- Navbar -->
-<nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
-  <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">P</div>
-      <div>
-        <h1 class="text-lg font-semibold tracking-tight">Extractor View</h1>
-        <p class="text-xs text-gray-500">PDF a Markdown</p>
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="brand">
+      <div class="brand-icon">P</div>
+      <div class="brand-text">
+        <h1>Extractor View</h1>
+        <p>PDF a Markdown — Extracción segura</p>
       </div>
     </div>
-    <div class="flex items-center gap-3">
-      <input type="text" id="tokenInput" placeholder="X-Internal-Token" class="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" autocomplete="off">
-      <p class="text-xs text-gray-400 hidden sm:block">Token interno</p>
-    </div>
+    <div style="width: 200px;"></div>
   </div>
 </nav>
 
-<!-- Main -->
-<main class="max-w-6xl mx-auto px-4 py-8">
-
+<div class="container">
   <!-- Upload Card -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 overflow-hidden">
-    <div class="p-6 border-b border-gray-100">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Subir documento</h2>
-      <p class="text-xs text-gray-500 mt-1">Arrastra un PDF aquí o haz clic para seleccionar</p>
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="section-title">Subir documento</div>
+        <div class="section-sub">Arrastra un PDF aquí o haz clic para seleccionar</div>
+      </div>
     </div>
-
-    <div class="p-8 text-center drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".pdf" class="hidden">
-      <div class="flex flex-col items-center justify-center h-64">
-        <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 border-2 border-blue-200">
-          <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+    <div class="card-body">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".pdf">
+        <div class="drop-icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
         </div>
-        <p class="text-lg font-medium text-gray-800 mb-2">Arrastra un PDF aquí</p>
-        <p class="text-sm text-gray-500 mb-6">o <span class="text-blue-600 font-medium cursor-pointer" id="browseBtn">seleccionar archivo</span></p>
-        <p class="text-xs text-gray-400">Solo archivos PDF · Máx. 10 MB</p>
+        <div class="drop-title">Arrastra un PDF aquí</div>
+        <div class="drop-hint">o <span class="browse-link" id="browseBtn">seleccionar archivo</span></div>
+        <div class="drop-note">Solo archivos PDF · Máx. 10 MB</div>
       </div>
     </div>
   </div>
 
   <!-- History Card -->
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+  <div class="card">
+    <div class="card-header">
       <div>
-        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Historial de documentos</h2>
-        <p class="text-xs text-gray-500 mt-1">Sesión actual</p>
+        <div class="section-title">Historial de documentos</div>
+        <div class="section-sub">Sesión actual</div>
       </div>
-      <span class="text-xs font-medium px-2 py-1 bg-gray-100 text-gray-600 rounded" id="docCount">0 documentos</span>
+      <div class="badge badge-done" id="docCount">0 documentos</div>
     </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-left">
-        <thead>
-          <tr class="border-b border-gray-100 bg-gray-50">
-            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Nombre del documento</th>
-            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Tamaño</th>
-            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Hora de subida</th>
-            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Estado</th>
-            <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="docTableBody">
-          <!-- filas inyectadas por JS -->
-        </tbody>
-      </table>
-    </div>
-
-    <div class="p-4 bg-gray-50 border-t border-gray-100 text-center" id="emptyState">
-      <p class="text-sm text-gray-500">No hay documentos subidos todavía. Arrastra un PDF para comenzar.</p>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre del documento</th>
+              <th>Tamaño</th>
+              <th>Hora de subida</th>
+              <th>Estado</th>
+              <th style="text-align:right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="docTableBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="emptyState">No hay documentos subidos todavía. Arrastra un PDF para comenzar.</div>
     </div>
   </div>
+</div>
 
-  <!-- Toast -->
-  <div id="toast" class="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50 flex items-center gap-3">
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-    <span class="text-sm font-medium" id="toastMsg"></span>
+<!-- Toast -->
+<div class="toast-container">
+  <div class="toast" id="toast">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    <span id="toastMsg"></span>
   </div>
-
-</main>
+</div>
 
 <script src="/static/app.js"></script>
 </body>
