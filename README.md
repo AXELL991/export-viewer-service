@@ -83,7 +83,7 @@ Otros endpoints (requieren `X-Internal-Token`):
 
 UI web: `http://localhost:8000/`
 Swagger: `http://localhost:8000/docs`
-Traefik dashboard: `http://localhost:8080/dashboard/`
+Traefik dashboard: `http://extract.universidad.localhost/dashboard/`
 
 ### 5. Detener y limpiar
 

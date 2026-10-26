@@ -7,12 +7,12 @@ http:
       entryPoints:
         - "web"
 
-    # Dashboard de Traefik (solo HTTP local)
+    # Dashboard de Traefik (HTTP)
     traefik-dashboard:
-      rule: "Host(`pdf-extractor.local`)"
+      rule: "Host(`extract.universidad.localhost`)"
       service: "api@internal"
       entryPoints:
-        - "traefik"
+        - "web"
 
   services:
     export-viewer:
