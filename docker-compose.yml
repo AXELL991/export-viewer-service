@@ -1,10 +1,212 @@
-# docker-compose.yml del export-viewer-service (OBSOLETO)
+# docker-compose.yml — export-viewer-service (PUNTO DE ENTRADA / orquestador)
 #
-# Este archivo ya no se usa. El compose fuente de verdad vive en la raíz del
-# proyecto (pdf_extractor_microservicios/docker-compose.yml) y se levanta con:
+# Ejecutar SOLO desde este directorio:
 #
-#   docker compose up --build                 # perfil por defecto: extractor + traefik
-#   docker compose --profile full up --build  # stack completo: + orquestador, CRUD, mongo, redis
+#   docker compose up --build -d     # levanta TODO el stack
+#   docker compose down -v           # detiene y elimina todo
 #
-# Mantén este directorio solo como contexto de build para el servicio
-# export-viewer-service definido en el compose raíz.
+# Servicios incluidos:
+#   - mongodb            : base de datos (CRUD)
+#   - redis              : rate limiting compartido
+#   - document-crud-service : persiste documentos extraídos
+#   - pdf-extractor-service : extrae texto de PDFs (5 réplicas)
+#   - export-viewer-service : ORQUESTADOR PÚBLICO — puerto 8000 (1 réplica)
+#   - traefik            : proxy inverso en puerto 80 (file provider, sin docker.sock)
+#
+# El orquestador es el único punto de entrada público:
+#   POST http://localhost:8000/v1/documents/upload  (header X-Internal-Token)
+#
+# El extractor se expone a tests de carga desde la red interna:
+#   http://pdf-extractor-service:8000/extract
+
+networks:
+  universidad-net:
+    driver: bridge
+
+services:
+  # ---------------------------------------------------------------------------
+  # Base de datos (document-crud-service)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:6.0
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: pdf_extractor_db
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - universidad-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Rate limiting compartido del orquestador
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --maxmemory-policy allkeys-lru
+    networks:
+      - universidad-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # Servicio CRUD de documentos
+  # ---------------------------------------------------------------------------
+  document-crud-service:
+    build:
+      context: ../document-crud-service
+      dockerfile: Dockerfile
+    container_name: document-crud-service
+    restart: unless-stopped
+    environment:
+      LOGLEVEL: info
+      MONGO_URI: mongodb://mongo:27017/pdf_extractor_db
+      MONGO_DB_NAME: pdf_extractor_db
+      INTERNAL_API_TOKEN: "change-me-in-production"
+      MAX_TEXT_BYTES: 15728640
+      PAGE_SIZE_MAX: 100
+    networks:
+      - universidad-net
+    depends_on:
+      mongodb:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Extractor de PDF (5 réplicas, pool de workers con pymupdf)
+  # ---------------------------------------------------------------------------
+  pdf-extractor-service:
+    build:
+      context: ../pdf-extractor-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      LOGLEVEL: info
+      MAX_FILE_SIZE_MB: "15"
+      MAX_PAGES: "500"
+      EXTRACT_TIMEOUT_SECONDS: "25"
+      INTERNAL_API_TOKEN: "change-me-in-production"
+      WORKER_POOL_SIZE: "1"
+      QUEUE_MAXSIZE: "100"
+    networks:
+      - universidad-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pdf-extractor.rule=PathPrefix(`/v1/extract`)"
+      - "traefik.http.routers.pdf-extractor.entrypoints=http"
+      - "traefik.http.services.pdf-extractor.loadbalancer.server.port=8000"
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Orquestador público — PUNTO DE ENTRADA (puerto 8000 publicado)
+  # ---------------------------------------------------------------------------
+  export-viewer-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: export-viewer-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      LOGLEVEL: info
+      EXTRACTOR_URL: http://pdf-extractor-service:8000
+      CRUD_URL: http://document-crud-service:8000
+      REDIS_URL: redis://redis:6379/0
+      HTTP_TIMEOUT: "5"
+      RETRY_ATTEMPTS: "3"
+      INTERNAL_API_TOKEN: "change-me-in-production"
+      MAX_FILE_SIZE_MB: "10"
+    networks:
+      - universidad-net
+    depends_on:
+      pdf-extractor-service:
+        condition: service_started
+      document-crud-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.export-viewer.rule=Host(`localhost`) || PathPrefix(`/`)"
+      - "traefik.http.routers.export-viewer.entrypoints=http"
+      - "traefik.http.services.export-viewer.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Traefik (proxy inverso, puerto 80) — proveedor de archivos (no necesita docker.sock)
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --providers.file.filename=/etc/traefik/traefik.yml
+      - --providers.file.watch=true
+      - --entrypoints.http.address=:80
+      - --entrypoints.traefik.address=:8080
+      - --api.insecure=true
+      - --api.dashboard=true
+    ports:
+      - "80:80"
+      - "8080:8080"
+    networks:
+      - universidad-net
+    volumes:
+      - ../traefik-proxy/config/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../traefik-proxy/config/config.yml:/etc/traefik/config.yml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  mongo-data:

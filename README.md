@@ -1,80 +1,138 @@
-# export-viewer-service
+# export-viewer-service — Orquestador (PUNTO DE ENTRADA)
 
-Orquestador de microservicios para extraer texto de PDF. Es el único punto de entrada público.
+Este servicio es el **único punto de entrada público** del stack. Desde aquí se ejecuta TODO el entorno con un solo comando.
 
-## ¿Qué hace?
-
-Recibe un PDF, lo envía al servicio extractor para obtener el texto, lo guarda en el servicio CRUD y te permite descargar el resultado en Markdown.
-
-## Inicio rápido (Docker)
-
-Los 3 microservicios deben quedar como carpetas hermanas:
+## Arquitectura del flujo
 
 ```
-export-viewer-service/
-pdf-extractor-service/
-document-crud-service/
+Cliente
+  │
+  ▼  POST /v1/documents/upload  (header: X-Internal-Token)
+export-viewer-service  (localhost:8000)
+  │
+  ├─ valida tamaño y magic bytes %PDF-
+  ├─ calcula SHA-256 (idempotencia)
+  ├─ llama al extractor: POST http://pdf-extractor-service:8000/v1/extract
+  │     ▼
+  │   pdf-extractor-service  (5 réplicas, pymupdf + ProcessPoolExecutor)
+  │   └─ devuelve { text, pages }
+  │
+  ▼
+document-crud-service: POST /v1/documents  (Idempotency-Key)
+  └─ guarda en MongoDB
+        │
+        ▼
+Cliente recibe 201 { sha256, filename, text, pages, ... }
 ```
 
-Desde `export-viewer-service`:
+## Inicio rápido (Docker) — EJECUTAR DESDE ESTE DIRECTORIO
+
+Los servicios deben quedar como carpetas hermanas:
+
+```
+pdf_extractor_microservicios/
+├─ export-viewer-service/      ← ejecutá acá
+├─ pdf-extractor-service/
+├─ document-crud-service/
+├─ traefik-proxy/
+└─ docker-compose.yml          (referencia, fuente de verdad en raíz)
+```
+
+### 1. Copiar variables de entorno
 
 ```bash
 cp .env.example .env
+```
+
+### 2. Levantar todo el stack
+
+```bash
 docker compose up --build -d
 ```
 
-Luego entra a:
+Esto levanta: mongodb, redis, document-crud-service, pdf-extractor-service (5 réplicas), export-viewer-service y traefik.
 
+### 3. Verificar que todo esté arriba
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
-http://localhost:8000/
+
+Debés ver las 5 réplicas del extractor y el orquestador en estado `Up (healthy)`.
+
+### 4. Probar la API
+
+Subí un PDF:
+
+```bash
+curl -X POST http://localhost:8000/v1/documents/upload \
+  -H "X-Internal-Token: change-me-in-production" \
+  -F "file=@documento.pdf"
 ```
 
-## Interfaz web
+Respuesta esperada: `201 { "sha256": "...", "filename": "...", "text": "...", "pages": N, ... }`
 
-En la página principal puedes:
-
-1. Pegar el token interno (`X-Internal-Token`) — se guarda en tu navegador.
-2. Subir un PDF.
-3. Ver el texto extraído y el número de páginas.
-4. Descargar el contenido como archivo Markdown (`.md`).
-5. Copiar el texto al portapapeles.
-
-## API
-
-Los endpoints de la API (`/v1/*`) requieren el header `X-Internal-Token`:
+Otros endpoints (requieren `X-Internal-Token`):
 
 | Método | Ruta |
 |--------|------|
-| POST | `/v1/documents/upload` |
 | GET | `/v1/documents` |
 | GET | `/v1/documents/{id}` |
-| GET | `/v1/documents/{id}/export?format=txt` |
+| GET | `/v1/documents/{id}/export?format=txt\|json` |
+| GET | `/health/live` |
+
+UI web: `http://localhost:8000/`
+Swagger: `http://localhost:8000/docs`
+Traefik dashboard: `http://localhost:8080/dashboard/`
+
+### 5. Detener y limpiar
+
+| Acción | Comando |
+|--------|---------|
+| Detener (conservar contenedores/volúmenes) | `docker compose stop` |
+| Reanudar | `docker compose start` |
+| Detener y eliminar contenedores + redes | `docker compose down` |
+| Eliminar TODO (incluido volumen de MongoDB) | `docker compose down -v` |
+
+## API
+
+Todos los endpoints de `/v1/*` requieren el header `X-Internal-Token`:
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| POST | `/v1/documents/upload` | Sube PDF, extrae y guarda → `201` |
+| GET | `/v1/documents` | Listar documentos (paginado) |
+| GET | `/v1/documents/{id}` | Obtener documento por ID |
+| GET | `/v1/documents/{id}/export?format=txt\|json` | Exportar documento |
+| GET | `/health/live` | Liveness probe |
 
 Documentación Swagger: `http://localhost:8000/docs`
 
-## Detener
-
-```bash
-docker compose stop
-```
-
-Para volver a usarlo:
-
-```bash
-docker compose start
-```
-
-Para eliminar todo:
-
-```bash
-docker compose down
-```
-
 ## Variables clave (en `.env`)
 
-| Variable | Descripción |
-|----------|-------------|
-| `INTERNAL_API_TOKEN` | Token interno (mismo valor en los 3 servicios) |
-| `EXTRACTOR_URL` | URL del servicio extractor |
-| `CRUD_URL` | URL del servicio CRUD |
-| `PUBLIC_PORT` | Puerto publicado (por defecto 8000) |
+| Variable | Por defecto | Descripción |
+|----------|-------------|-------------|
+| `INTERNAL_API_TOKEN` | `change-me-in-production` | Token interno (mismo en los 3 servicios) |
+| `EXTRACTOR_URL` | `http://pdf-extractor-service:8000` | URL del extractor |
+| `CRUD_URL` | `http://document-crud-service:8000` | URL del CRUD |
+| `MAX_FILE_SIZE_MB` | `10` | Límite de tamaño del PDF (orquestador) |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis para rate limiting |
+| `PUBLIC_PORT` | `8000` | Puerto publicado en el host |
+
+## Pruebas de carga (k6)
+
+Desde este directorio, con el stack levantado:
+
+```bash
+k6 run k6_load_test.js
+```
+
+O con variables personalizadas:
+
+```bash
+BASE_URL=http://localhost:8000 INTERNAL_TOKEN=change-me-in-production PDF_PATH=../pdf-extractor-service/tests/stress/pdfs/stress_9mb.pdf k6 run k6_load_test.js
+```
+
+## Cierre ordenado
+
+`docker compose stop` envía `SIGTERM` a todos los contenedores. uvicorn usa `--timeout-graceful-shutdown 25` para finalizar las requests en vuelo antes de apagar. El `ProcessPoolExecutor` del extractor espera los jobs en curso.

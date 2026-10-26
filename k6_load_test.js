@@ -10,20 +10,24 @@ export let options = {
   ],
   thresholds: {
     http_req_duration: ['p(95)<2000'], // 95% < 2s
-    http_req_failed: ['rate<0.01'], // <1% failures
+    http_req_failed: ['rate<0.01'],    // <1% failures
   },
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://universidad.localhost';
-const PDF_PATH = __ENV.PDF_PATH || 'sample.pdf'; // path on k6 runner
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
+const PDF_PATH = __ENV.PDF_PATH || 'sample.pdf';
+const INTERNAL_TOKEN = __ENV.INTERNAL_TOKEN || 'change-me-in-production';
 
 export default function () {
   const pdf = open(PDF_PATH, 'b');
-  const data = {
+  const res = http.post(`${BASE_URL}/v1/documents/upload`, {
     file: http.file(pdf, 'sample.pdf', 'application/pdf'),
-  };
-  const res = http.post(`${BASE_URL}/process`, data);
+  }, {
+    headers: {
+      'X-Internal-Token': INTERNAL_TOKEN,
+    },
+  });
 
   check(res, {
     'status is 201': (r) => r.status === 201,
@@ -32,4 +36,3 @@ export default function () {
 
   sleep(1);
 }
-
