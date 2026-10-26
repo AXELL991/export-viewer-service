@@ -2,14 +2,14 @@ http:
   routers:
     # API pública - Orquestador (UI y endpoints) por HTTP
     export-viewer:
-      rule: "Host(`pdf-extractor.local`)"
+      rule: "Host(`extract.universidad.localhost`)"
       service: "export-viewer"
       entryPoints:
         - "web"
 
     # Dashboard de Traefik (HTTP)
     traefik-dashboard:
-      rule: "Host(`extract.universidad.localhost`)"
+      rule: "Host(`traefik.extract.universidad.localhost`)"
       service: "api@internal"
       entryPoints:
         - "web"

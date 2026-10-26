@@ -170,7 +170,7 @@ services:
           memory: 512M
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.export-viewer.rule=Host(`localhost`) || PathPrefix(`/`)"
+      - "traefik.http.routers.export-viewer.rule=Host(`extract.universidad.localhost`) || PathPrefix(`/`)"
       - "traefik.http.routers.export-viewer.entrypoints=http"
       - "traefik.http.services.export-viewer.loadbalancer.server.port=8000"
     healthcheck:

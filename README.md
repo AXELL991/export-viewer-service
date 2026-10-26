@@ -8,7 +8,7 @@ Este servicio es el **único punto de entrada público** del stack. Desde aquí 
 Cliente
   │
   ▼  POST /v1/documents/upload  (header: X-Internal-Token)
-export-viewer-service  (localhost:8000)
+export-viewer-service  (extract.universidad.localhost)
   │
   ├─ valida tamaño y magic bytes %PDF-
   ├─ calcula SHA-256 (idempotencia)
@@ -81,8 +81,8 @@ Otros endpoints (requieren `X-Internal-Token`):
 | GET | `/v1/documents/{id}/export?format=txt\|json` |
 | GET | `/health/live` |
 
-UI web: `http://localhost:8000/`
-Swagger: `http://localhost:8000/docs`
+UI web: `http://extract.universidad.localhost/`
+Swagger: `http://extract.universidad.localhost/docs`
 Traefik dashboard: `http://extract.universidad.localhost/dashboard/`
 
 ### 5. Detener y limpiar
@@ -106,7 +106,7 @@ Todos los endpoints de `/v1/*` requieren el header `X-Internal-Token`:
 | GET | `/v1/documents/{id}/export?format=txt\|json` | Exportar documento |
 | GET | `/health/live` | Liveness probe |
 
-Documentación Swagger: `http://localhost:8000/docs`
+Documentación Swagger: `http://extract.universidad.localhost/docs`
 
 ## Variables clave (en `.env`)
 
