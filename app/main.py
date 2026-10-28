@@ -324,11 +324,13 @@ async def upload_document(
         "text": text,
         "pages": pages,
         "pdf_hash": pdf_hash,
+        "owner_id": _client_ip(request),
     }
     crud_headers = {
         "X-Internal-Token": settings.internal_api_token,
         "X-Request-ID": request_id,
         "Idempotency-Key": idempotency_key,
+        "X-Owner-Id": _client_ip(request),
     }
     crud_timeout = _httpx_timeout(settings.connect_timeout, settings.crud_read_timeout)
     try:
@@ -404,6 +406,7 @@ async def get_document(
             headers={
                 "X-Internal-Token": settings.internal_api_token,
                 "X-Request-ID": request_id,
+                "X-Owner-Id": _client_ip(request),
             },
             timeout=_httpx_timeout(settings.connect_timeout, settings.crud_read_timeout),
             idempotent=True,
@@ -433,6 +436,7 @@ async def export_document(
             headers={
                 "X-Internal-Token": settings.internal_api_token,
                 "X-Request-ID": request_id,
+                "X-Owner-Id": _client_ip(request),
             },
             timeout=_httpx_timeout(settings.connect_timeout, settings.crud_read_timeout),
             idempotent=True,

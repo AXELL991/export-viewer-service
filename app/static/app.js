@@ -1,5 +1,6 @@
 (() => {
   const API_BASE = '';
+  const INTERNAL_API_TOKEN = 'change-me-in-production';
   const ENDPOINTS = {
     upload: '/v1/documents/upload',
     export: (id) => `/v1/documents/${id}/export?format=txt`,
@@ -73,11 +74,11 @@
         <td style="text-align:right">
           ${doc.status === 'completado'
             ? `
-              <button class="btn btn-primary" onclick="app.downloadMarkdown('${escapeHtml(doc.id || doc._id)}')">
+              <button class="btn btn-primary" data-action="download" data-doc-id="${escapeHtml(doc.id || doc._id)}">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                 Descargar .md
               </button>
-              <button class="btn btn-ghost" onclick="app.copyText('${escapeHtml(doc.id || doc._id)}')">
+              <button class="btn btn-ghost" data-action="copy" data-doc-id="${escapeHtml(doc.id || doc._id)}">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
                 Copiar
               </button>
@@ -187,10 +188,17 @@
 
   async function downloadMarkdown(docId) {
     const doc = documents.find(d => d.id === docId);
-    if (!doc) return;
+    if (!doc) {
+      showToast('Documento no encontrado', 'error');
+      return;
+    }
 
     try {
-      const res = await fetch(`${API_BASE}${ENDPOINTS.export(docId)}`);
+      const res = await fetch(`${API_BASE}${ENDPOINTS.export(docId)}`, {
+        headers: {
+          'X-Internal-Token': INTERNAL_API_TOKEN,
+        },
+      });
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const text = await res.text();
 
@@ -212,15 +220,44 @@
 
   async function copyText(docId) {
     const doc = documents.find(d => d.id === docId);
-    if (!doc || !doc.text) return;
+    if (!doc || !doc.text) {
+      showToast('No hay texto para copiar', 'error');
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(doc.text);
       showToast('Texto copiado al portapapeles');
     } catch (err) {
-      showToast('Error al copiar', 'error');
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = doc.text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('Texto copiado al portapapeles');
+      } catch (fallbackErr) {
+        console.error(fallbackErr);
+        showToast('Error al copiar', 'error');
+      }
     }
   }
+
+  docTableBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const docId = btn.getAttribute('data-doc-id');
+    const action = btn.getAttribute('data-action');
+    if (action === 'download') {
+      downloadMarkdown(docId);
+    } else if (action === 'copy') {
+      copyText(docId);
+    }
+  });
 
   renderTable();
 

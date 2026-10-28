@@ -112,7 +112,7 @@ Documentación Swagger: `http://extract.universidad.localhost/docs`
 
 | Variable | Por defecto | Descripción |
 |----------|-------------|-------------|
-| `INTERNAL_API_TOKEN` | `change-me-in-production` | Token interno (mismo en los 3 servicios) |
+| `INTERNAL_API_TOKEN` | — | Token interno (mismo en los 3 servicios, requerido sin default inseguro) |
 | `EXTRACTOR_URL` | `http://pdf-extractor-service:8000` | URL del extractor |
 | `CRUD_URL` | `http://document-crud-service:8000` | URL del CRUD |
 | `MAX_FILE_SIZE_MB` | `10` | Límite de tamaño del PDF (orquestador) |

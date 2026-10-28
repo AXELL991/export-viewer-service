@@ -40,7 +40,7 @@ def client():
 
 @pytest.fixture
 def auth_headers():
-    return {"X-Internal-Token": "test-token"}
+    return {"X-Internal-Token": "test-token", "X-Owner-Id": "test-owner-001"}
 
 
 @pytest.fixture
