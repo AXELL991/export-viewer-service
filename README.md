@@ -2,6 +2,37 @@
 
 Servicio FastAPI que actúa como único punto de entrada público del stack de extracción de PDF. Recibe un archivo PDF del cliente, lo envía al servicio extractor para obtener el texto, y persiste el resultado mediante el servicio CRUD. No almacena datos por sí mismo ni se conecta directamente a MongoDB.
 
+## Acceso rápido (para entrar a la página localmente)
+
+Si nunca has usado este proyecto, sigue estos 3 pasos:
+
+1. Abre una terminal en la carpeta del proyecto (`export-viewer-service`).
+2. Ejecuta:
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+   Esto levanta toda la infraestructura y los microservicios automáticamente.
+
+3. Espera a que los contenedores estén arriba y abre tu navegador en:
+
+   **http://localhost:8000**
+
+Esa es la página principal del sistema. Desde ahí puedes subir un PDF, ver el texto extraído y consultar los documentos guardados.
+
+### URLs útiles
+
+| Qué quieres hacer | URL |
+|-------------------|-----|
+| Página principal | http://localhost:8000 |
+| Documentación de la API (Swagger) | http://localhost:8000/docs |
+| Panel de Traefik | http://localhost:8080/dashboard/ |
+
+### ⚠️ Importante sobre `http://pdf-extractor-service`
+
+Ese nombre **no funciona en tu navegador**. Es un nombre interno de Docker que solo los contenedores se entienden entre ellos. Desde tu computadora, siempre usa **http://localhost:8000**.
+
 ## Responsabilidades
 
 - Recibir PDFs vía `POST /v1/documents/upload`
