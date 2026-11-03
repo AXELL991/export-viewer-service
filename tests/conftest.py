@@ -24,12 +24,7 @@ def point_urls_to_mock(monkeypatch):
     monkeypatch.setattr(settings, "extractor_url", "http://extractor.test")
     monkeypatch.setattr(settings, "crud_url", "http://crud.test")
     monkeypatch.setattr(settings, "internal_api_token", "test-token")
-    monkeypatch.setattr(settings, "rate_limit_max", 10000)
     monkeypatch.setattr(settings, "max_file_size_mb", 10)
-    # Asegura que el rate limiter se recree con el nuevo límite al arrancar.
-    main_module._rate_limiter = None
-    # Aísla el circuit breaker entre tests (es un singleton de proceso).
-    downstream.http_client._breakers.clear()
 
 
 @pytest.fixture

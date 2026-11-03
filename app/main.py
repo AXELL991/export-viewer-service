@@ -33,7 +33,6 @@ from app.core.downstream import (
     http_client,
 )
 from app.core.logging_config import configure_logging
-from app.core.rate_limit import RateLimiter, create_redis_client
 
 configure_logging(settings.loglevel.upper())
 logger = logging.getLogger(__name__)
@@ -46,15 +45,9 @@ def _httpx_timeout(connect: float, read: float) -> httpx.Timeout:
     """Construye un httpx.Timeout con todos los parámetros requeridos por httpx 0.28+."""
     return httpx.Timeout(connect=connect, read=read, write=read, pool=30.0)
 
-_rate_limiter: RateLimiter | None = None
-
 
 def _client_ip(request: Request) -> str:
-    """Devuelve la IP del cliente. Solo usa X-Forwarded-For si TRUSTED_PROXY=true."""
-    if settings.trusted_proxy:
-        xff = request.headers.get("X-Forwarded-For")
-        if xff:
-            return xff.split(",")[0].strip()
+    """Devuelve la IP del cliente."""
     if request.client is not None:
         return request.client.host
     return "unknown"
@@ -75,10 +68,7 @@ def _map_downstream_error(exc: Exception) -> HTTPException:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _rate_limiter
     await http_client.start()
-    redis_client = create_redis_client(settings.redis_url)
-    _rate_limiter = RateLimiter(settings.rate_limit_max, settings.rate_limit_window, redis_client)
     logger.info("export-viewer-service iniciado")
     try:
         yield
@@ -160,25 +150,6 @@ async def security_headers_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
-# Middleware: rate limit por IP
-# ---------------------------------------------------------------------------
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    if request.url.path.startswith("/health"):
-        return await call_next(request)
-    assert _rate_limiter is not None
-    ip = _client_ip(request)
-    if not _rate_limiter.allow(ip):
-        request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Demasiadas peticiones. Intente más tarde."},
-            headers={"Retry-After": "5", "X-Request-ID": request_id},
-        )
-    return await call_next(request)
-
-
-# ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 @app.get("/health/live", tags=["health"])
@@ -228,7 +199,6 @@ async def upload_document(
     - 413: el archivo supera MAX_FILE_SIZE_MB (se corta en streaming).
     - 415: no es un PDF (magic bytes %PDF-).
     - 422: PDF cifrado/corrupto o supera límite de páginas.
-    - 429: cola del extractor llena (Retry-After).
     - 502/503/504: fallo del extractor o del CRUD.
     """
     request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
@@ -344,8 +314,6 @@ async def upload_document(
             idempotent=True,
         )
     except DownstreamError:
-        # Si falla el CRUD tras extraer, se devuelve 502 y el cliente puede
-        # reintentar sin duplicar (misma Idempotency-Key).
         raise HTTPException(status_code=502, detail="No se pudo guardar el documento en el CRUD")
 
     if crud_resp.status_code == 409:

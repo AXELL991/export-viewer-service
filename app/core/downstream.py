@@ -13,7 +13,6 @@ import random
 
 import httpx
 
-from app.core.circuit_breaker import CircuitBreaker
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -45,7 +44,6 @@ class DownstreamTimeout(DownstreamError):
 class DownstreamClient:
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
-        self._breakers: dict[str, CircuitBreaker] = {}
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -62,16 +60,6 @@ class DownstreamClient:
         if self._client is None:
             raise RuntimeError("HTTP client no iniciado")
         return self._client
-
-    def breaker_for(self, service_name: str) -> CircuitBreaker:
-        breaker = self._breakers.get(service_name)
-        if breaker is None:
-            breaker = CircuitBreaker(
-                failures=settings.circuit_breaker_failures,
-                recovery=settings.circuit_breaker_recovery,
-            )
-            self._breakers[service_name] = breaker
-        return breaker
 
     # ------------------------------------------------------------------ backoff
     @staticmethod
@@ -111,18 +99,12 @@ class DownstreamClient:
         idempotent: bool = False,
     ) -> httpx.Response:
         """
-        Ejecuta una petición con reintentos y circuit breaker.
+        Ejecuta una petición con reintentos.
 
-        - ``idempotent=True`` permite reintentar POST (envía Idempotency-Key).
+        - ``idempotent=True`` permite reintentar POST.
         - El POST de extractor (idempotent=False) NUNCA se reintenta tras un
           timeout de lectura.
         """
-        breaker = self.breaker_for(service_name)
-        if breaker.is_open():
-            raise DownstreamUnavailable(
-                f"Circuito abierto para {service_name}",
-            )
-
         last_error: Exception | None = None
         max_attempts = settings.retry_attempts + 1
 
@@ -140,14 +122,12 @@ class DownstreamClient:
                     timeout=timeout,
                 )
 
-                # Éxito: cerrar circuito y devolver.
+                # Éxito: devolver.
                 if resp.status_code < 400:
-                    breaker.record_success()
                     return resp
 
                 # Errores que merecen reintento.
                 if resp.status_code in RETRYABLE_STATUS:
-                    breaker.record_failure()
                     last_error = DownstreamError(
                         f"{service_name} devolvió {resp.status_code}",
                         status_code=resp.status_code,
@@ -156,7 +136,6 @@ class DownstreamClient:
                     if attempt + 1 < max_attempts:
                         await self._sleep_before_retry(attempt, resp.headers)
                         continue
-                    # Último intento: propagar.
                     raise DownstreamError(
                         f"{service_name} devolvió {resp.status_code}",
                         status_code=resp.status_code,
@@ -164,7 +143,6 @@ class DownstreamClient:
                     )
 
                 # Otros errores de cliente/servidor: no se reintentan.
-                breaker.record_failure()
                 raise DownstreamError(
                     f"{service_name} devolvió {resp.status_code}",
                     status_code=resp.status_code,
@@ -174,7 +152,6 @@ class DownstreamClient:
             except DownstreamError:
                 raise
             except httpx.ReadTimeout as exc:
-                breaker.record_failure()
                 last_error = exc
                 # El POST del extractor (no idempotente) NUNCA se reintenta
                 # tras timeout de lectura.
@@ -185,14 +162,12 @@ class DownstreamClient:
                     continue
                 raise DownstreamTimeout("Timeout de lectura en " + service_name)
             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
-                breaker.record_failure()
                 last_error = exc
                 if attempt + 1 < max_attempts:
                     await self._sleep_before_retry(attempt, httpx.Headers())
                     continue
                 raise DownstreamUnavailable(f"No se pudo conectar con {service_name}")
             except httpx.HTTPError as exc:
-                breaker.record_failure()
                 last_error = exc
                 if attempt + 1 < max_attempts:
                     await self._sleep_before_retry(attempt, httpx.Headers())

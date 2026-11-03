@@ -1,68 +1,78 @@
-# export-viewer-service — Orquestador (PUNTO DE ENTRADA)
+# export-viewer-service — Orquestador (punto de entrada)
 
-Este servicio es el **único punto de entrada público** del stack. Desde aquí se ejecuta TODO el entorno con un solo comando.
+Servicio FastAPI que actúa como único punto de entrada público del stack de extracción de PDF. Recibe un archivo PDF del cliente, lo envía al servicio extractor para obtener el texto, y persiste el resultado mediante el servicio CRUD. No almacena datos por sí mismo ni se conecta directamente a MongoDB.
 
-## Arquitectura del flujo
+## Responsabilidades
 
+- Recibir PDFs vía `POST /v1/documents/upload`
+- Validar tamaño del archivo y magic bytes (`%PDF-`)
+- Calcular el hash SHA-256 del PDF para idempotencia
+- Llamar a `pdf-extractor-service` para extraer el texto
+- Llamar a `document-crud-service` para persistir el documento
+- Exponer endpoints de consulta y exportación de documentos
+- Aplicar cabeceras de seguridad y trazabilidad (`X-Request-ID`)
+
+## Endpoints
+
+Todos los endpoints de `/v1/*` requieren el header `X-Internal-Token`.
+
+| Método | Ruta | Descripción | Respuesta exitosa |
+|--------|------|-------------|-------------------|
+| POST | `/v1/documents/upload` | Sube PDF, extrae texto y guarda | `201` |
+| GET | `/v1/documents` | Lista documentos (paginado) | `200` |
+| GET | `/v1/documents/{id}` | Obtiene un documento por ID | `200` |
+| GET | `/v1/documents/{id}/export?format=txt\|json` | Exporta documento | `200` |
+| GET | `/health/live` | Sonda de vitalidad | `200` |
+| GET | `/health/ready` | Sonda de readiness (consulta downstream) | `200` |
+
+## Variables de entorno
+
+Se leen desde `.env` (copiar de `.env.example`).
+
+| Variable | Descripción | Ejemplo |
+|----------|-------------|---------|
+| `EXTRACTOR_URL` | URL del servicio extractor | `http://pdf-extractor-service:8000` |
+| `CRUD_URL` | URL del servicio CRUD | `http://document-crud-service:8000` |
+| `CONNECT_TIMEOUT` | Timeout de conexión (segundos) | `5` |
+| `EXTRACTOR_READ_TIMEOUT` | Timeout de lectura del extractor (segundos) | `60` |
+| `CRUD_READ_TIMEOUT` | Timeout de lectura del CRUD (segundos) | `5` |
+| `RETRY_ATTEMPTS` | Número de reintentos ante fallo downstream | `3` |
+| `RETRY_BACKOFF_BASE` | Base de backoff exponencial (segundos) | `0.5` |
+| `MAX_FILE_SIZE_MB` | Tamaño máximo de PDF en MB | `10` |
+| `LOGLEVEL` | Nivel de logging | `info` |
+| `INTERNAL_API_TOKEN` | Token interno para autenticación entre servicios | `change-me-in-production` |
+| `PUBLIC_PORT` | Puerto publicado en el host | `8000` |
+
+## Cómo ejecutar
+
+### Desde el directorio del servicio
+
+```bash
+cd export-viewer-service
 ```
-Cliente
-  │
-  ▼  POST /v1/documents/upload  (header: X-Internal-Token)
-export-viewer-service  (extract.universidad.localhost)
-  │
-  ├─ valida tamaño y magic bytes %PDF-
-  ├─ calcula SHA-256 (idempotencia)
-  ├─ llama al extractor: POST http://pdf-extractor-service:8000/v1/extract
-  │     ▼
-  │   pdf-extractor-service  (5 réplicas, pymupdf + ProcessPoolExecutor)
-  │   └─ devuelve { text, pages }
-  │
-  ▼
-document-crud-service: POST /v1/documents  (Idempotency-Key)
-  └─ guarda en MongoDB
-        │
-        ▼
-Cliente recibe 201 { sha256, filename, text, pages, ... }
-```
 
-## Inicio rápido (Docker) — EJECUTAR DESDE ESTE DIRECTORIO
-
-Los servicios deben quedar como carpetas hermanas:
-
-```
-pdf_extractor_microservicios/
-├─ export-viewer-service/      ← ejecutá acá
-├─ pdf-extractor-service/
-├─ document-crud-service/
-├─ traefik-proxy/
-└─ docker-compose.yml          (referencia, fuente de verdad en raíz)
-```
-
-### 1. Copiar variables de entorno
+### Copiar variables de entorno
 
 ```bash
 cp .env.example .env
 ```
 
-### 2. Levantar todo el stack
+### Levantar el stack completo (desde este directorio)
 
 ```bash
 docker compose up --build -d
 ```
 
-Esto levanta: mongodb, redis, document-crud-service, pdf-extractor-service (5 réplicas), export-viewer-service y traefik.
+Esto levanta MongoDB, Redis, Traefik y los tres microservicios.
 
-### 3. Verificar que todo esté arriba
+### Levantar solo infraestructura primero
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}"
+docker compose -f ../docker-compose.infra.yml up --build -d
+docker compose up --build -d
 ```
 
-Debés ver las 5 réplicas del extractor y el orquestador en estado `Up (healthy)`.
-
-### 4. Probar la API
-
-Subí un PDF:
+### Probar la API
 
 ```bash
 curl -X POST http://localhost:8000/v1/documents/upload \
@@ -72,67 +82,28 @@ curl -X POST http://localhost:8000/v1/documents/upload \
 
 Respuesta esperada: `201 { "sha256": "...", "filename": "...", "text": "...", "pages": N, ... }`
 
-Otros endpoints (requieren `X-Internal-Token`):
-
-| Método | Ruta |
-|--------|------|
-| GET | `/v1/documents` |
-| GET | `/v1/documents/{id}` |
-| GET | `/v1/documents/{id}/export?format=txt\|json` |
-| GET | `/health/live` |
-
-UI web: `http://extract.universidad.localhost/`
-Swagger: `http://extract.universidad.localhost/docs`
-Traefik dashboard: `http://extract.universidad.localhost/dashboard/`
-
-### 5. Detener y limpiar
-
-| Acción | Comando |
-|--------|---------|
-| Detener (conservar contenedores/volúmenes) | `docker compose stop` |
-| Reanudar | `docker compose start` |
-| Detener y eliminar contenedores + redes | `docker compose down` |
-| Eliminar TODO (incluido volumen de MongoDB) | `docker compose down -v` |
-
-## API
-
-Todos los endpoints de `/v1/*` requieren el header `X-Internal-Token`:
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/v1/documents/upload` | Sube PDF, extrae y guarda → `201` |
-| GET | `/v1/documents` | Listar documentos (paginado) |
-| GET | `/v1/documents/{id}` | Obtener documento por ID |
-| GET | `/v1/documents/{id}/export?format=txt\|json` | Exportar documento |
-| GET | `/health/live` | Liveness probe |
-
-Documentación Swagger: `http://extract.universidad.localhost/docs`
-
-## Variables clave (en `.env`)
-
-| Variable | Por defecto | Descripción |
-|----------|-------------|-------------|
-| `INTERNAL_API_TOKEN` | — | Token interno (mismo en los 3 servicios, requerido sin default inseguro) |
-| `EXTRACTOR_URL` | `http://pdf-extractor-service:8000` | URL del extractor |
-| `CRUD_URL` | `http://document-crud-service:8000` | URL del CRUD |
-| `MAX_FILE_SIZE_MB` | `10` | Límite de tamaño del PDF (orquestador) |
-| `REDIS_URL` | `redis://redis:6379/0` | Redis para rate limiting |
-| `PUBLIC_PORT` | `8000` | Puerto publicado en el host |
-
-## Pruebas de carga (k6)
-
-Desde este directorio, con el stack levantado:
+### Detener y limpiar
 
 ```bash
-k6 run k6_load_test.js
+docker compose down                   # negocio
+docker compose -f ../docker-compose.infra.yml down  # infraestructura
+docker compose down -v                # incluye volúmenes
 ```
 
-O con variables personalizadas:
+## Dependencias
+
+- Python 3.12
+- FastAPI, uvicorn
+- httpx (cliente HTTP hacia downstream)
+- pydantic-settings (configuración)
+- python-json-logger (logging estructurado en JSON)
+- python-multipart (upload de archivos)
+
+## Tests
 
 ```bash
-BASE_URL=http://localhost:8000 INTERNAL_TOKEN=change-me-in-production PDF_PATH=../pdf-extractor-service/tests/stress/pdfs/stress_9mb.pdf k6 run k6_load_test.js
+uv run pytest tests/ -v
+uv run ruff check app/ tests/
 ```
 
-## Cierre ordenado
-
-`docker compose stop` envía `SIGTERM` a todos los contenedores. uvicorn usa `--timeout-graceful-shutdown 25` para finalizar las requests en vuelo antes de apagar. El `ProcessPoolExecutor` del extractor espera los jobs en curso.
+Los tests mockean los servicios downstream (extractor y CRUD) con `respx`, por lo que no requieren levantar el stack completo.
