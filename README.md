@@ -29,10 +29,6 @@ Esa es la página principal del sistema. Desde ahí puedes subir un PDF, ver el 
 | Documentación de la API (Swagger) | http://localhost:8000/docs |
 | Panel de Traefik | http://localhost:8080/dashboard/ |
 
-### ⚠️ Importante sobre `http://pdf-extractor-service`
-
-Ese nombre **no funciona en tu navegador**. Es un nombre interno de Docker que solo los contenedores se entienden entre ellos. Desde tu computadora, siempre usa **http://localhost:8000**.
-
 ## Responsabilidades
 
 - Recibir PDFs vía `POST /v1/documents/upload`
