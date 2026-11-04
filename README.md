@@ -28,6 +28,64 @@ Esa es la página principal del sistema. Desde ahí puedes subir un PDF, ver el 
 | Página principal | http://localhost:8000 |
 | Documentación de la API (Swagger) | http://localhost:8000/docs |
 | Panel de Traefik | http://localhost:8080/dashboard/ |
+| MongoDB Compass (puerto publicado) | localhost:27017 |
+
+## Conectar con MongoDB Compass
+
+MongoDB almacena los documentos extraídos y es accesible desde tu computadora para inspección visual con [MongoDB Compass](https://www.mongodb.com/products/compass).
+
+### Paso 1: Levantar la infraestructura
+
+Asegúrate de que MongoDB esté corriendo:
+
+```bash
+docker compose -f ../docker-compose.infra.yml up --build -d
+```
+
+El puerto `27017` está publicado en tu host (configurado en `docker-compose.infra.yml`).
+
+### Paso 2: Abrir MongoDB Compass
+
+1. Abre **MongoDB Compass**.
+2. Haz clic en **"New Connection"**.
+3. Pega la siguiente URI de conexión:
+
+```
+mongodb://pdf_admin:tu_contraseña@localhost:27017/pdf_extractor_db?authSource=admin
+```
+
+Reemplaza `tu_contraseña` por el valor de `MONGO_ROOT_PASSWORD` en el archivo `.env` del proyecto padre.
+
+O bien, rellena los campos por separado:
+
+| Campo | Valor |
+|-------|-------|
+| Host | `localhost` |
+| Puerto | `27017` |
+| Usuario | `pdf_admin` |
+| Contraseña | `tu_contraseña` (de `MONGO_ROOT_PASSWORD` en `.env`) |
+| Auth DB | `admin` |
+
+4. Haz clic en **Connect**.
+5. Verás la base de datos `pdf_extractor_db` con sus colecciones.
+
+### Paso 3: Cambiar la contraseña (opcional)
+
+Si quieres cambiar la contraseña de MongoDB:
+
+1. Edita el archivo `.env` y modifica `MONGO_ROOT_PASSWORD`.
+2. Recrea el contenedor de MongoDB:
+
+```bash
+docker compose -f ../docker-compose.infra.yml up -d mongodb
+```
+
+⚠️ **Importante:** `MONGO_ROOT_PASSWORD` solo se aplica la **primera vez** que MongoDB inicia (cuando el volumen de datos está vacío). Si ya existen datos, el cambio en `.env` **no surtirá efecto** hasta que borres el volumen:
+
+```bash
+docker compose -f ../docker-compose.infra.yml down -v   # ⚠️ borra todos los datos de MongoDB
+docker compose -f ../docker-compose.infra.yml up --build -d
+```
 
 ## Responsabilidades
 
