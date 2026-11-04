@@ -16,12 +16,23 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -39,6 +50,13 @@ logger = logging.getLogger(__name__)
 
 PDF_MAGIC = b"%PDF-"
 CHUNK_SIZE = 65536  # 64 KiB
+
+
+def verify_internal_token(x_internal_token: str | None = Header(default=None)) -> None:
+    if not secrets.compare_digest(
+        (x_internal_token or "").encode(), settings.internal_api_token.encode()
+    ):
+        raise HTTPException(status_code=401, detail="Token interno inválido")
 
 
 def _httpx_timeout(connect: float, read: float) -> httpx.Timeout:
@@ -187,7 +205,11 @@ async def health_ready():
 # ---------------------------------------------------------------------------
 # POST /v1/documents/upload
 # ---------------------------------------------------------------------------
-@app.post("/v1/documents/upload", tags=["documentos"])
+@app.post(
+    "/v1/documents/upload",
+    tags=["documentos"],
+    dependencies=[Depends(verify_internal_token)],
+)
 async def upload_document(
     request: Request,
     file: UploadFile = File(..., description="Archivo PDF a procesar"),
@@ -331,7 +353,7 @@ async def upload_document(
 # ---------------------------------------------------------------------------
 # GET /v1/documents  (paginado, se reenvía al CRUD)
 # ---------------------------------------------------------------------------
-@app.get("/v1/documents", tags=["documentos"])
+@app.get("/v1/documents", tags=["documentos"], dependencies=[Depends(verify_internal_token)])
 async def list_documents(
     request: Request,
     page: int = Query(1, ge=1),
@@ -360,7 +382,11 @@ async def list_documents(
 # ---------------------------------------------------------------------------
 # GET /v1/documents/{id}
 # ---------------------------------------------------------------------------
-@app.get("/v1/documents/{doc_id}", tags=["documentos"])
+@app.get(
+    "/v1/documents/{doc_id}",
+    tags=["documentos"],
+    dependencies=[Depends(verify_internal_token)],
+)
 async def get_document(
     request: Request,
     doc_id: str,
@@ -389,7 +415,11 @@ async def get_document(
 # ---------------------------------------------------------------------------
 # GET /v1/documents/{id}/export?format=txt|json
 # ---------------------------------------------------------------------------
-@app.get("/v1/documents/{doc_id}/export", tags=["documentos"])
+@app.get(
+    "/v1/documents/{doc_id}/export",
+    tags=["documentos"],
+    dependencies=[Depends(verify_internal_token)],
+)
 async def export_document(
     request: Request,
     doc_id: str,
