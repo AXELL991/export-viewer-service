@@ -34,15 +34,17 @@ Esa es la página principal del sistema. Desde ahí puedes subir un PDF, ver el 
 
 MongoDB almacena los documentos extraídos y es accesible desde tu computadora para inspección visual con [MongoDB Compass](https://www.mongodb.com/products/compass).
 
-### Paso 1: Levantar la infraestructura
+### Paso 1: Levantar todo el stack
 
-Asegúrate de que MongoDB esté corriendo:
+Desde la carpeta `export-viewer-service`, ejecuta:
 
 ```bash
-docker compose -f ../docker-compose.infra.yml up --build -d
+docker compose up --build -d
 ```
 
-El puerto `27017` está publicado en tu host (configurado en `docker-compose.infra.yml`).
+Esto levanta junto: MongoDB, Redis, Traefik, document-crud-service, pdf-extractor-service y export-viewer-service.
+
+El puerto `27017` de MongoDB está publicado en tu host.
 
 ### Paso 2: Abrir MongoDB Compass
 
@@ -69,23 +71,23 @@ O bien, rellena los campos por separado:
 4. Haz clic en **Connect**.
 5. Verás la base de datos `pdf_extractor_db` con sus colecciones.
 
-### Paso 3: Cambiar la contraseña (opcional)
+### Paso 3: Cambiar la contraseña de MongoDB (opcional)
 
-Si quieres cambiar la contraseña de MongoDB:
+Si cambiaste `MONGO_ROOT_PASSWORD` en el archivo `.env` y necesitas que surta efecto:
 
-1. Edita el archivo `.env` y modifica `MONGO_ROOT_PASSWORD`.
-2. Recrea el contenedor de MongoDB:
-
-```bash
-docker compose -f ../docker-compose.infra.yml up -d mongodb
-```
-
-⚠️ **Importante:** `MONGO_ROOT_PASSWORD` solo se aplica la **primera vez** que MongoDB inicia (cuando el volumen de datos está vacío). Si ya existen datos, el cambio en `.env` **no surtirá efecto** hasta que borres el volumen:
+1. Detén y borra todo (incluye el volumen de datos de MongoDB):
 
 ```bash
-docker compose -f ../docker-compose.infra.yml down -v   # ⚠️ borra todos los datos de MongoDB
-docker compose -f ../docker-compose.infra.yml up --build -d
+docker compose down -v
 ```
+
+2. Levanta todo de nuevo:
+
+```bash
+docker compose up --build -d
+```
+
+⚠️ **Importante:** `MONGO_ROOT_PASSWORD` solo se aplica la **primera vez** que MongoDB inicia (cuando el volumen de datos está vacío). Si ya existen datos, el cambio en `.env` **no surtirá efecto** hasta que borres el volumen con `docker compose down -v` (esto elimina todos los documentos guardados).
 
 ## Responsabilidades
 
