@@ -48,7 +48,7 @@ class DownstreamClient:
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
         limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
-        self._client = httpx.AsyncClient(limits=limits, follow_redirects=True)
+        self._client = httpx.AsyncClient(limits=limits, follow_redirects=False)
 
     async def stop(self) -> None:
         if self._client is not None:

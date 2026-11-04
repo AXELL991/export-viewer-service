@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
