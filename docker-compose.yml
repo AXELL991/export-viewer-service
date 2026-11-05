@@ -178,7 +178,7 @@ services:
       - "traefik.http.routers.export-viewer.entrypoints=http"
       - "traefik.http.services.export-viewer.loadbalancer.server.port=8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
       interval: 10s
       timeout: 5s
       retries: 5
