@@ -3,7 +3,7 @@
   const INTERNAL_API_TOKEN = 'c2db8b6b0449ceb6cfb3252e060999e5d220e239eadebdde70af7e3885c13e08';
   const ENDPOINTS = {
     upload: '/v1/documents/upload',
-    export: (id) => `/v1/documents/${id}/export?format=txt`,
+    export: (id) => `/v1/documents/${id}/export?format=md`,
     list: '/v1/documents',
   };
 

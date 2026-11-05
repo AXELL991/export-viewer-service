@@ -8,7 +8,7 @@ Rutas:
   POST   /v1/documents/upload           - Sube PDF, extrae y guarda
   GET    /v1/documents                  - Listar documentos (paginado)
   GET    /v1/documents/{id}             - Obtener documento
-  GET    /v1/documents/{id}/export      - Exportar (txt|json)
+  GET    /v1/documents/{id}/export      - Exportar (txt|md|json)
   GET    /health/live                   - Liveness
   GET    /health/ready                  - Readiness (consulta downstream)
 """
@@ -446,12 +446,12 @@ async def export_document(
     doc = resp.json()
     if format == "json":
         return JSONResponse(content=doc, headers={"X-Request-ID": request_id})
-    if format == "txt":
+    if format in ("txt", "md"):
         return PlainTextResponse(
             content=doc.get("text", ""),
             headers={
                 "X-Request-ID": request_id,
-                "Content-Type": "text/plain; charset=utf-8",
+                "Content-Type": f"text/{format}; charset=utf-8",
             },
         )
-    raise HTTPException(status_code=422, detail="Formato no válido. Use 'txt' o 'json'.")
+    raise HTTPException(status_code=422, detail="Formato no válido. Use 'txt', 'md' o 'json'.")
